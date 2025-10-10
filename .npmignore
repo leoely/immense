@@ -1,0 +1,15 @@
+node_modules/
+src/
+test/
+README.md
+LICENSE
+gulpfile.babel.js
+docker-compose.yml
+babel.config.json
+.nvmrc
+.gitignore
+.gitattributes
+.eslintrc
+.eslintignore
+.editorconfig
+yarn.lock

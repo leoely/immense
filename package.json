@@ -1,0 +1,29 @@
+{
+  "name": "immense",
+  "version": "0.0.0",
+  "description": "File storage big data project.",
+  "main": "index.js",
+  "repository": "git@github.com:leoely/immense.git",
+  "author": "Leo Ely",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "lint": "eslint ./src",
+    "build": "gulp build",
+    "test": "jest",
+    "run": "yarn run build && node dist/index.js"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.20.7",
+    "@babel/core": "^7.20.7",
+    "@babel/preset-env": "^7.20.2",
+    "@babel/register": "^7.22.5",
+    "babel-plugin-root-import": "^6.6.0",
+    "babel-preset-minify": "^0.4.3",
+    "gulp-babel": "^8.0.0",
+    "jest": "^29.6.1"
+  },
+  "dependencies": {
+    "gulp": "^4.0.2"
+  }
+}
