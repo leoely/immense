@@ -32,8 +32,8 @@ function checkHiddenDirs(paths) {
 async function clearEmptyDirs(paths) {
   const dirs = paths.split(path.sep);
   while (true) {
-    const sites = dirs.join(path.sep);
-    const directory = await fsPromises.opendir();
+    const site = dirs.join(path.sep);
+    const directory = await fsPromises.opendir(site);
     const entry = await directory.read();
     await directory.close();
     if (entry === null) {
@@ -111,7 +111,7 @@ class Storage {
     return fsPromises.readFile(filePath);
   }
 
-  async readBufferPiece(place, position) {
+  async readBufferPiece(place, position, length) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
     }
@@ -132,7 +132,7 @@ class Storage {
       throw error('[error] cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'r');
-    return await readPromise(fd, buffer, { postion, });
+    return await readPromise(fd, { position, length, });
   }
 
   async writeBufferPiece(place, position, buffer) {
@@ -211,7 +211,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'a');
-    await fsPromises.appendFile(fd, data);
+    await writePromise(fd, data);
     await fdatasyncPromise(fd);
     await closePromise(fd);
   }
