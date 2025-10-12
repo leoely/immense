@@ -3,10 +3,6 @@ import { Buffer, }from 'buffer';
 import { describe, expect, test, } from '@jest/globals';
 import Storage from '~/class/Storage';
 
-beforeAll(() => {
-  childProcess.execSync('rm -rf /tmp/immense');
-});
-
 describe('[Class] Storage;', () => {
   test('Storage should be able to complete basic file operations.', async () => {
     const storage = new Storage('/tmp/immense');
