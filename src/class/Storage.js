@@ -8,6 +8,7 @@ import fdatasyncPromise from '~/lib/util/fdatasyncPromise';
 import openPromise from '~/lib/util/openPromise';
 import closePromise from '~/lib/util/closePromise';
 import * as reasonByteArray from '~/lib/util/reasonByteArray';
+import * as nonZeroByteArray from '~/lib/util/nonZeroByteArray';
 
 function checkHiddenFile(fileName) {
   let ans = true;
@@ -132,14 +133,13 @@ function getIndexRelDirs(code) {
   return paths.join(path.sep);
 }
 
-function toReason(value) {
-  value -= 33;
+function swapBlank(value) {
   switch (value) {
     case 96:
       value = 0;
       break;
     case 108:
-      value = 1:
+      value = 1;
       break;
     case 110:
       value = 3;
@@ -160,7 +160,7 @@ function toReason(value) {
       value = 96;
       break;
     case 1:
-      value = 108:
+      value = 108;
       break;
     case 3:
       value = 110;
@@ -178,32 +178,161 @@ function toReason(value) {
       value = 140;
       break;
   }
-  value -= 9;
+  return value;
+}
+
+function swapUnsafe(value) {
   switch (value) {
-    case 92 - 42:
-      value = 43 - 42;
+    case 50:
+      value = 1;
       break;
-    case 63 - 42:
-      value = 45 - 42;
+    case 21:
+      value = 3;
       break;
-    case 58 - 42:
-      value = 48 - 42;
+    case 16:
+      value = 6;
       break;
-    case 124 - 42:
-      value = 49 - 42;
+    case 82:
+      value = 7;
       break;
-    case 60 - 42:
-      value = 50 - 42;
+    case 18:
+      value = 8;
       break;
-    case 62 - 42:
-      value = 51 - 42;
+    case 20:
+      value = 9;
       break;
-    case 59 - 42:
-      value = 52 - 42;
+    case 17:
+      value = 10;
       break;
-    case 61 - 42:
-      value = 53 - 42;
+    case 19:
+      value = 11;
       break;
+    case 1:
+      value = 50;
+      break;
+    case 3:
+      value = 21;
+      break;
+    case 6:
+      value = 16;
+      break;
+    case 7:
+      value = 82;
+      break;
+    case 8:
+      value = 18;
+      break;
+    case 9:
+      value = 20;
+      break;
+    case 10:
+      value = 17;
+      break;
+    case 11:
+      value = 19;
+      break;
+  }
+  return value;
+}
+
+function toInt(value) {
+  value -= 33;
+  value = swapBlank(value);
+  value -= 9;
+  value = swapUnsafe(value);
+  value -= 12;
+  return value;
+}
+
+function toChar(value) {
+  value += 12;
+  value = swapUnsafe(value);
+  value += 9;
+  value = swapBlank(value);
+  value += 33;
+  return value;
+}
+
+async function getPtrsHash(ptrsPath) {
+  const buffer = await fsPromises.readFile(ptrsPath);
+  const ptrsHash = {};
+  let bytes = [];
+  let flag = 0;
+  let key;
+  buffer.forEach((byte) => {
+    switch (byte) {
+      case 0:
+        switch (flag) {
+          case 0:
+            key = nonZeroByteArray.toInt(bytes);
+            flag = 1;
+            break;
+          default:
+            if (ptrsHash[key] === undefined) {
+              ptrsHash[key] = [];
+            }
+            ptrsHash[key].push(nonZeroByteArray.toInt(bytes));
+            flag = 0;
+        }
+        bytes = [];
+        break;
+      default:
+        bytes.push(byte);
+    }
+  });
+  return ptrsHash;
+}
+
+async function getNames(namesPath) {
+  const buffer = await fsPromises.readFile(namesPath);
+  const names = [];
+  let bytes = [];
+  buffer.forEach((byte) => {
+    switch (byte) {
+      case 0:
+        names.push(Buffer.from(bytes).toString());
+        bytes = [];
+        break;
+      default:
+        bytes.push(byte);
+    }
+  });
+  return ptrsHash;
+}
+
+async function addPtrToPtrs(ptrsPath, code, frequency) {
+  const fd = await openPromise(ptrsPath, 'a');
+  const ptrBufArr= [];
+  ptrBufArr.push(nonZeroByteArray.fromInt(code));
+  ptrBufArr.push(0);
+  ptrBufArr.push(nonZeroByteArray.fromInt(frequency));
+  ptrBufArr.push(0);
+  await writePromise(fd, Buffer.from(ptrBufArr.flat()));
+  await fdatasyncPromise(fd);
+  await closePromise(fd);
+}
+
+async function addNameToNames(namesPath, code, frequency, name) {
+  const fd = await openPromise(namesPath, 'a');
+  const nameBufArr= [];
+  nameBufArr.push(Buffer.from(name));
+  nameBufArr.push(0);
+  await writePromise(fd, Buffer.from(nameBufArr.flat()));
+  await fdatasyncPromise(fd);
+  await closePromise(fd);
+}
+
+async function addIndexFile(ptrsPath, code, frequency, name, idx, last) {
+  if (idx === last) {
+    await addPtrToPtrs(ptrsPath, code, frequency);
+    const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
+    if (!await existsPromise(namesDirPath)) {
+      await fsPromises.mkdir(namesDirPath);
+    }
+    const namesPath = path.join(namesDirPath, String(frequency));
+    await addNameToNames(namesPath, code, frequency, name);
+  } else {
+    await addPtrToPtrs(ptrsPath, code, frequency);
   }
 }
 
@@ -349,14 +478,28 @@ class Storage {
     }
     const { indexPath, } = this;
     const sortGatherings = getSortGatherings(place);
-    for (let i = 0; i < sortGatherings.length; i += 1) {
-      const [code] = sortGatherings[i];
+    const { length, } = sortGatherings;
+    for (let i = 0; i < length; i += 1) {
+      const [code, frequency] = sortGatherings[i];
       const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
       if (!await existsPromise(indexAbsDirs)) {
         await fsPromises.mkdir(indexAbsDirs, { recursive: true, });
       }
-      const depthName = Buffer.from(byteArray.fromInt(toReason(i))).toString();
-      const leafPath = path.join(indexAbsDirs, depthName);
+      const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const ptrsPath = path.join(indexAbsDirs, depthName);
+      if (!await existsPromise(ptrsPath)) {
+          await addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+      } else {
+        const ptrsHash = await getPtrsHash(ptrsPath);
+        const frequencys = ptrsHash[code];
+        if (Array.isArray(frequency)) {
+          if (!frequencys.includes(frequcy)) {
+            await addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+          }
+        } else {
+          await addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+        }
+      }
     }
     const fd = await openPromise(filePath, 'w');
     await writePromise(fd, buffer);
@@ -415,6 +558,9 @@ class Storage {
     for (let i = 0; i < sortGatherings.length; i += 1) {
       const [code] = sortGatherings[i];
       const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
+      const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const ptrsPath = path.join(indexAbsDirs, depthName);
+      await fsPromises.unlink(ptrsPath);
       await clearEmptyDirs(indexAbsDirs, '.index');
     }
     await fsPromises.unlink(filePath);
