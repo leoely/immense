@@ -1,14 +1,13 @@
 import fsPromises from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
+import ByteArray from '~/class/ByteArray';
 import existsPromise from '~/lib/util/existsPromise';
 import readPromise from '~/lib/util/readPromise';
 import writePromise from '~/lib/util/writePromise';
 import fdatasyncPromise from '~/lib/util/fdatasyncPromise';
 import openPromise from '~/lib/util/openPromise';
 import closePromise from '~/lib/util/closePromise';
-import * as reasonByteArray from '~/lib/util/reasonByteArray';
-import * as nonZeroByteArray from '~/lib/util/nonZeroByteArray';
 
 function checkHiddenFile(fileName) {
   let ans = true;
@@ -253,36 +252,6 @@ function toChar(value) {
   return value;
 }
 
-async function getPtrsHash(ptrsPath) {
-  const buffer = await fsPromises.readFile(ptrsPath);
-  const ptrsHash = {};
-  let bytes = [];
-  let flag = 0;
-  let key;
-  buffer.forEach((byte) => {
-    switch (byte) {
-      case 0:
-        switch (flag) {
-          case 0:
-            key = nonZeroByteArray.toInt(bytes);
-            flag = 1;
-            break;
-          default:
-            if (ptrsHash[key] === undefined) {
-              ptrsHash[key] = [];
-            }
-            ptrsHash[key].push(nonZeroByteArray.toInt(bytes));
-            flag = 0;
-        }
-        bytes = [];
-        break;
-      default:
-        bytes.push(byte);
-    }
-  });
-  return ptrsHash;
-}
-
 async function getNames(namesPath) {
   const buffer = await fsPromises.readFile(namesPath);
   const names = [];
@@ -300,18 +269,6 @@ async function getNames(namesPath) {
   return ptrsHash;
 }
 
-async function addPtrToPtrs(ptrsPath, code, frequency) {
-  const fd = await openPromise(ptrsPath, 'a');
-  const ptrBufArr= [];
-  ptrBufArr.push(nonZeroByteArray.fromInt(code));
-  ptrBufArr.push(0);
-  ptrBufArr.push(nonZeroByteArray.fromInt(frequency));
-  ptrBufArr.push(0);
-  await writePromise(fd, Buffer.from(ptrBufArr.flat()));
-  await fdatasyncPromise(fd);
-  await closePromise(fd);
-}
-
 async function addNameToNames(namesPath, code, frequency, name) {
   const fd = await openPromise(namesPath, 'a');
   const nameBufArr= [];
@@ -320,20 +277,6 @@ async function addNameToNames(namesPath, code, frequency, name) {
   await writePromise(fd, Buffer.from(nameBufArr.flat()));
   await fdatasyncPromise(fd);
   await closePromise(fd);
-}
-
-async function addIndexFile(ptrsPath, code, frequency, name, idx, last) {
-  if (idx === last) {
-    await addPtrToPtrs(ptrsPath, code, frequency);
-    const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
-    if (!await existsPromise(namesDirPath)) {
-      await fsPromises.mkdir(namesDirPath);
-    }
-    const namesPath = path.join(namesDirPath, String(frequency));
-    await addNameToNames(namesPath, code, frequency, name);
-  } else {
-    await addPtrToPtrs(ptrsPath, code, frequency);
-  }
 }
 
 class Storage {
@@ -364,6 +307,8 @@ class Storage {
       fs.mkdirSync(indexPath);
     }
     this.indexPath = indexPath;
+    this.reasonByteArray = new ByteArray({ size: 202n, });
+    this.nonZeroByteArray = new ByteArray({ size: 256n, shift: 1n, });
   }
 
   dealOptions(options) {
@@ -407,6 +352,12 @@ class Storage {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
     }
+    if (!Number.isInteger(position)) {
+      throw new Error('[Error] The parameter position should be an integer type.');
+    }
+    if (!(position >= 0)) {
+      throw new Error('[Error] The parameter position should be greater than or equal to zero.');
+    }
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
@@ -430,6 +381,12 @@ class Storage {
   async writeBufferPiece(place, position, buffer) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
+    }
+    if (!Number.isInteger(position)) {
+      throw new Error('[Error] The parameter position should be an integer type.');
+    }
+    if (!(position >= 0)) {
+      throw new Error('[Error] The parameter position should be greater than or equal to zero.');
     }
     const { location, } = this;
     const filePath = path.join(location, place);
@@ -476,7 +433,10 @@ class Storage {
     if (!await existsPromise(dirname)) {
       await fsPromises.mkdir(dirname, { recursive: true, });
     }
-    const { indexPath, } = this;
+    const {
+      indexPath,
+      reasonByteArray,
+    } = this;
     const sortGatherings = getSortGatherings(place);
     const { length, } = sortGatherings;
     for (let i = 0; i < length; i += 1) {
@@ -488,16 +448,16 @@ class Storage {
       const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
       if (!await existsPromise(ptrsPath)) {
-          await addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
       } else {
-        const ptrsHash = await getPtrsHash(ptrsPath);
+        const ptrsHash = await this.getPtrsHash(ptrsPath);
         const frequencys = ptrsHash[code];
         if (Array.isArray(frequency)) {
           if (!frequencys.includes(frequcy)) {
-            await addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+            await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
           }
         } else {
-          await addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
         }
       }
     }
@@ -553,7 +513,10 @@ class Storage {
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file to be deleted does not exist.');
     }
-    const { indexPath, } = this;
+    const {
+      indexPath,
+      reasonByteArray,
+    } = this;
     const sortGatherings = getSortGatherings(place);
     for (let i = 0; i < sortGatherings.length; i += 1) {
       const [code] = sortGatherings[i];
@@ -565,6 +528,93 @@ class Storage {
     }
     await fsPromises.unlink(filePath);
     await clearEmptyDirs(dirname);
+  }
+
+  async shrink(place, length) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    if (!Number.isInteger(length)) {
+      throw new Error('[Error] The parameter length should be an integer type.');
+    }
+    if (!(length >= 0)) {
+      throw new Error('[Error] The parameter length should be greater than or equal to zero.');
+    }
+    const { location, } = this;
+    const filePath = path.join(location, place);
+    const dirname = dealDirname(path.dirname(filePath));
+    if (!checkHiddenDirs(dirname)) {
+      throw Error('[Error] Cannot operate hidden directorys.');
+    }
+    const basename = path.basename(filePath);
+    if (!checkHiddenFile(basename)) {
+      throw Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(filePath).length >= 1)) {
+      throw new Error('[Error] The added path does not correspond to the file type.');
+    }
+    if (!await existsPromise(filePath)) {
+      throw new Error('[Error] The file to be shrinked does not exist.');
+    }
+    await fsPromises.truncate(filePath, length);
+  }
+
+  async getPtrsHash(ptrsPath) {
+    const { nonZeroByteArray, } = this;
+    const buffer = await fsPromises.readFile(ptrsPath);
+    const ptrsHash = {};
+    let bytes = [];
+    let flag = 0;
+    let key;
+    buffer.forEach((byte) => {
+      switch (byte) {
+        case 0:
+          switch (flag) {
+            case 0:
+              key = nonZeroByteArray.toInt(bytes);
+              flag = 1;
+              break;
+            default:
+              if (ptrsHash[key] === undefined) {
+                ptrsHash[key] = [];
+              }
+              ptrsHash[key].push(nonZeroByteArray.toInt(bytes));
+              flag = 0;
+          }
+          bytes = [];
+          break;
+        default:
+          bytes.push(byte);
+      }
+    });
+    return ptrsHash;
+  }
+
+  async addPtrToPtrs(ptrsPath, code, frequency) {
+    const { nonZeroByteArray, } = this;
+    const fd = await openPromise(ptrsPath, 'a');
+    const ptrBufArr= [];
+    ptrBufArr.push(nonZeroByteArray.fromInt(code));
+    ptrBufArr.push(0);
+    ptrBufArr.push(nonZeroByteArray.fromInt(frequency));
+    ptrBufArr.push(0);
+    await writePromise(fd, Buffer.from(ptrBufArr.flat()));
+    await fdatasyncPromise(fd);
+    await closePromise(fd);
+  }
+
+  async addIndexFile(ptrsPath, code, frequency, name, idx, last) {
+    if (idx === last) {
+      await this.addPtrToPtrs(ptrsPath, code, frequency);
+      const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
+      if (!await existsPromise(namesDirPath)) {
+        await fsPromises.mkdir(namesDirPath);
+      }
+      const namesPath = path.join(namesDirPath, String(frequency));
+      await addNameToNames(namesPath, code, frequency, name);
+    } else {
+      await this.addPtrToPtrs(ptrsPath, code, frequency);
+    }
   }
 }
 
