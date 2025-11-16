@@ -5,9 +5,12 @@ import ByteArray from '~/class/ByteArray';
 import existsPromise from '~/lib/util/existsPromise';
 import readPromise from '~/lib/util/readPromise';
 import writePromise from '~/lib/util/writePromise';
-import fdatasyncPromise from '~/lib/util/fdatasyncPromise';
+import fsyncPromise from '~/lib/util/fsyncPromise';
 import openPromise from '~/lib/util/openPromise';
 import closePromise from '~/lib/util/closePromise';
+import statPromise from '~/lib/util/statPromise';
+import renamePromise from '~/lib/util/renamePromise';
+import symlinkPromise from '~/lib/util/symlinkPromise';
 
 function checkHiddenFile(fileName) {
   let ans = true;
@@ -275,7 +278,7 @@ async function addNameToNames(namesPath, code, frequency, name) {
   nameBufArr.push(Buffer.from(name));
   nameBufArr.push(0);
   await writePromise(fd, Buffer.from(nameBufArr.flat()));
-  await fdatasyncPromise(fd);
+  await fsyncPromise(fd);
   await closePromise(fd);
 }
 
@@ -335,7 +338,7 @@ class Storage {
       throw new Error('[Error] The added path does not correspond to the file type.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file you want to get does not exist.');
+      throw new Error('[Error] The file being operated on does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -361,10 +364,10 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] the added path does not correspond to the file type.');
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file you want to get does not exist.');
+      throw new Error('[Error] The file being operated on does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -391,10 +394,10 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] the added path does not correspond to the file type.');
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file you want to get does not exist.');
+      throw new Error('[Error] The file being operated on does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -406,7 +409,7 @@ class Storage {
     }
     const fd = await openPromise(filePath, 'a');
     await writePromise(fd, buffer, { position, });
-    await fdatasyncPromise(fd);
+    await fsyncPromise(fd);
     await closePromise(fd);
   }
 
@@ -417,7 +420,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] the added path does not correspond to the file type.');
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -428,7 +431,7 @@ class Storage {
       throw error('[error] cannot operate hidden files.');
     }
     if (await existsPromise(filePath)) {
-      throw new Error('[Error] The file to be created already exists.');
+      throw new Error('[Error] The file being operated on does not exist.');
     }
     if (!await existsPromise(dirname)) {
       await fsPromises.mkdir(dirname, { recursive: true, });
@@ -463,7 +466,7 @@ class Storage {
     }
     const fd = await openPromise(filePath, 'w');
     await writePromise(fd, buffer);
-    await fdatasyncPromise(fd);
+    await fsyncPromise(fd);
     await closePromise(fd);
   }
 
@@ -474,10 +477,10 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new Error('[Error] The added path does not correspond to the file type.');
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file to be added does not exist.');
+      throw new Error('[Error] The file being operated on does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -489,7 +492,7 @@ class Storage {
     }
     const fd = await openPromise(filePath, 'a');
     await writePromise(fd, data);
-    await fdatasyncPromise(fd);
+    await fsyncPromise(fd);
     await closePromise(fd);
   }
 
@@ -508,10 +511,10 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
-      throw new Error('[Error] The added path does not correspond to the file type.');
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file to be deleted does not exist.');
+      throw new Error('[Error] The file being operated on does not exist.');
     }
     const {
       indexPath,
@@ -551,12 +554,120 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
-      throw new Error('[Error] The added path does not correspond to the file type.');
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file to be shrinked does not exist.');
+      throw new Error('[Error] The file being operated on does not exist.');
     }
     await fsPromises.truncate(filePath, length);
+  }
+
+  async rename(oldPlace, newPlace) {
+    if (typeof oldPlace !== 'string') {
+      throw new Error('[Error] The parameter oldPlace should be of string type.');
+    }
+    const { location, } = this;
+    const oldFilePath = path.join(location, oldPlace);
+    const oldDirname = dealDirname(path.dirname(oldFilePath));
+    if (!checkHiddenDirs(oldDirname)) {
+      throw Error('[Error] Cannot operate hidden directorys.');
+    }
+    const oldBasename = path.basename(oldFilePath);
+    if (!checkHiddenFile(oldBasename)) {
+      throw Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(oldFilePath).length >= 1)) {
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
+    }
+    if (!await existsPromise(oldFilePath)) {
+      throw new Error('[Error] The file being operated on does not exist.');
+    }
+    if (typeof newPlace !== 'string') {
+      throw new Error('[Error] The parameter oldPlace should be of string type.');
+    }
+    const newFilePath = path.join(location, newPlace);
+    const newDirname = dealDirname(path.dirname(newFilePath));
+    if (!checkHiddenDirs(newDirname)) {
+      throw Error('[Error] Cannot operate hidden directorys.');
+    }
+    const newBasename = path.basename(newFilePath);
+    if (!checkHiddenFile(newBasename)) {
+      throw Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(newFilePath).length >= 1)) {
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
+    }
+    if (await existsPromise(newFilePath)) {
+      throw new Error('[Error] The renamed file path cannot exist.');
+    }
+    await renamePromise(filePath, newFilePath);
+    if (dirname !== newDirname) {
+      await clearEmptyDirs(dirname);
+    }
+  }
+
+  async link(targetPlace, linkPlace) {
+    if (typeof targetPlace !== 'string') {
+      throw new Error('[Error] The parameter targetPlace should be of string type.');
+    }
+    const { location, } = this;
+    const targetFilePath = path.join(location, targetPlace);
+    const targetDirname = dealDirname(path.dirname(targetFilePath));
+    if (!checkHiddenDirs(targetDirname)) {
+      throw Error('[Error] Cannot operate hidden directorys.');
+    }
+    const targetBasename = path.basename(targetFilePath);
+    if (!checkHiddenFile(targetBasename)) {
+      throw Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(targetFilePath).length >= 1)) {
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
+    }
+    if (!await existsPromise(targetFilePath)) {
+      throw new Error('[Error] The file being operated on does not exist.');
+    }
+    if (typeof linkPlace !== 'string') {
+      throw new Error('[Error] The parameter linkPlace should be of string type.');
+    }
+    const linkFilePath = path.join(location, linkPlace);
+    const linkDirname = dealDirname(path.dirname(linkFilePath));
+    if (!checkHiddenDirs(linkDirname)) {
+      throw Error('[Error] Cannot operate hidden directorys.');
+    }
+    const linkBasename = path.basename(linkFilePath);
+    if (!checkHiddenFile(linkBasename)) {
+      throw Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(linkFilePath).length >= 1)) {
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
+    }
+    if (await existsPromise(linkFilePath)) {
+      throw new Error('[Error] The renamed file path cannot exist.');
+    }
+    await symlinkPromise(targetFilePath, linkFilePath);
+  }
+
+  async getStats(place) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    const { location, } = this;
+    const filePath = path.join(location, place);
+    const dirname = dealDirname(path.dirname(filePath));
+    if (!checkHiddenDirs(dirname)) {
+      throw Error('[Error] Cannot operate hidden directorys.');
+    }
+    const basename = path.basename(filePath);
+    if (!checkHiddenFile(basename)) {
+      throw Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(filePath).length >= 1)) {
+      throw new error('[error] The file you are working with needs to have its file extension specified.');
+    }
+    if (!await existsPromise(filePath)) {
+      throw new Error('[Error] The file being operated on does not exist.');
+    }
+    return await statPromise(filePath);
   }
 
   async getPtrsHash(ptrsPath) {
@@ -599,7 +710,7 @@ class Storage {
     ptrBufArr.push(nonZeroByteArray.fromInt(frequency));
     ptrBufArr.push(0);
     await writePromise(fd, Buffer.from(ptrBufArr.flat()));
-    await fdatasyncPromise(fd);
+    await fsyncPromise(fd);
     await closePromise(fd);
   }
 

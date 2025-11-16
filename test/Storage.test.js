@@ -17,6 +17,9 @@ describe('[Class] Storage;', () => {
     await storage.appendData('test-file-operation/operation.txt', ' etc');
     data = await storage.readData('test-file-operation/operation.txt');
     expect(data.toString()).toMatch('perform related file OPERATIONS. etc');
+    await storage.shrink('test-file-operation/operation.txt', 21);
+    data = await storage.readData('test-file-operation/operation.txt');
+    expect(data.toString()).toMatch('perform related file');
     await storage.remove('test-file-operation/operation.txt');
     expect(childProcess.execSync('ls /tmp/immense').toString()).toMatch('');
   });
