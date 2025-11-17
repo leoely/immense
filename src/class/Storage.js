@@ -60,7 +60,7 @@ function dealDirname(dirname) {
 
 function radixSort(list) {
   if (!Array.isArray(list)) {
-    throw new Error('The parameter list should be an array type.');
+    throw new Error('[Error] The parameter list should be an array type.');
   }
   list = list.map((e) => [e[0], e]);
   const bucket = new Array(10);
@@ -364,18 +364,18 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw error('[error] cannot operate hidden directorys.');
+      throw Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw error('[error] cannot operate hidden files.');
+      throw Error('[Error] cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'r');
     return await readPromise(fd, { position, length, });
@@ -394,18 +394,18 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw error('[error] cannot operate hidden directorys.');
+      throw Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw error('[error] cannot operate hidden files.');
+      throw Error('[Error] cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'a');
     await writePromise(fd, buffer, { position, });
@@ -420,15 +420,15 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw error('[error] cannot operate hidden directorys.');
+      throw Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw error('[error] cannot operate hidden files.');
+      throw Error('[Error] cannot operate hidden files.');
     }
     if (await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
@@ -477,7 +477,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
@@ -511,7 +511,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
@@ -554,7 +554,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
@@ -577,7 +577,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(oldFilePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(oldFilePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
@@ -595,7 +595,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(newFilePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (await existsPromise(newFilePath)) {
       throw new Error('[Error] The renamed file path cannot exist.');
@@ -621,7 +621,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(targetFilePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(targetFilePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
@@ -639,7 +639,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(linkFilePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (await existsPromise(linkFilePath)) {
       throw new Error('[Error] The renamed file path cannot exist.');
@@ -662,7 +662,7 @@ class Storage {
       throw Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
-      throw new error('[error] The file you are working with needs to have its file extension specified.');
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
