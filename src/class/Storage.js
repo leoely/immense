@@ -8,9 +8,6 @@ import writePromise from '~/lib/util/writePromise';
 import fsyncPromise from '~/lib/util/fsyncPromise';
 import openPromise from '~/lib/util/openPromise';
 import closePromise from '~/lib/util/closePromise';
-import statPromise from '~/lib/util/statPromise';
-import renamePromise from '~/lib/util/renamePromise';
-import symlinkPromise from '~/lib/util/symlinkPromise';
 
 function checkHiddenFile(fileName) {
   let ans = true;
@@ -348,7 +345,12 @@ class Storage {
     if (!checkHiddenFile(basename)) {
       throw Error('[Error] Cannot operate hidden files.');
     }
-    return fsPromises.readFile(filePath);
+    const stats = await fsPromises.stat(filePath, { bigint: true, });
+    if (stats.isSymbolicLink()) {
+      return fsPromises.readlink(filePath);
+    } else {
+      return fsPromises.readFile(filePath);
+    }
   }
 
   async readBufferPiece(place, position, length) {
@@ -429,9 +431,6 @@ class Storage {
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
       throw Error('[Error] cannot operate hidden files.');
-    }
-    if (await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
     }
     if (!await existsPromise(dirname)) {
       await fsPromises.mkdir(dirname, { recursive: true, });
@@ -533,7 +532,7 @@ class Storage {
     await clearEmptyDirs(dirname);
   }
 
-  async shrink(place, length) {
+  async truncate(place, length) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
     }
@@ -600,9 +599,9 @@ class Storage {
     if (await existsPromise(newFilePath)) {
       throw new Error('[Error] The renamed file path cannot exist.');
     }
-    await renamePromise(filePath, newFilePath);
-    if (dirname !== newDirname) {
-      await clearEmptyDirs(dirname);
+    await fsPromises.rename(oldFilePath, newFilePath);
+    if (oldDirname !== newDirname) {
+      await clearEmptyDirs(oldDirname);
     }
   }
 
@@ -641,10 +640,7 @@ class Storage {
     if (!(path.extname(linkFilePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
-    if (await existsPromise(linkFilePath)) {
-      throw new Error('[Error] The renamed file path cannot exist.');
-    }
-    await symlinkPromise(targetFilePath, linkFilePath);
+    await fsPromises.symlink(targetFilePath, linkFilePath);
   }
 
   async getStats(place) {
@@ -667,7 +663,7 @@ class Storage {
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being operated on does not exist.');
     }
-    return await statPromise(filePath);
+    return await fsPromises.stat(filePath, { bigint: true, });
   }
 
   async getPtrsHash(ptrsPath) {
