@@ -415,6 +415,32 @@ class Storage {
     await closePromise(fd);
   }
 
+  async writeBuffer(place, buffer) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    const { location, } = this;
+    const filePath = path.join(location, place);
+    if (!(path.extname(filePath).length >= 1)) {
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+    }
+    if (!await existsPromise(filePath)) {
+      throw new Error('[Error] The file being operated on does not exist.');
+    }
+    const dirname = dealDirname(path.dirname(filePath));
+    if (!checkHiddenDirs(dirname)) {
+      throw Error('[Error] cannot operate hidden directorys.');
+    }
+    const basename = path.basename(filePath);
+    if (!checkHiddenFile(basename)) {
+      throw Error('[Error] cannot operate hidden files.');
+    }
+    const fd = await openPromise(filePath, 'a');
+    await writePromise(fd, buffer);
+    await fsyncPromise(fd);
+    await closePromise(fd);
+  }
+
   async addBuffer(place, buffer) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
@@ -512,21 +538,24 @@ class Storage {
     if (!(path.extname(filePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
-    if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
-    }
-    const {
-      indexPath,
-      reasonByteArray,
-    } = this;
-    const sortGatherings = getSortGatherings(place);
-    for (let i = 0; i < sortGatherings.length; i += 1) {
-      const [code] = sortGatherings[i];
-      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
-      const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const ptrsPath = path.join(indexAbsDirs, depthName);
-      await fsPromises.unlink(ptrsPath);
-      await clearEmptyDirs(indexAbsDirs, '.index');
+    const stats = await fsPromises.lstat(filePath);
+    if (!stats.isSymbolicLink()) {
+      if (!await existsPromise(filePath)) {
+        throw new Error('[Error] The file being operated on does not exist.');
+      }
+      const {
+        indexPath,
+        reasonByteArray,
+      } = this;
+      const sortGatherings = getSortGatherings(place);
+      for (let i = 0; i < sortGatherings.length; i += 1) {
+        const [code] = sortGatherings[i];
+        const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
+        const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+        const ptrsPath = path.join(indexAbsDirs, depthName);
+        await fsPromises.unlink(ptrsPath);
+        await clearEmptyDirs(indexAbsDirs, '.index');
+      }
     }
     await fsPromises.unlink(filePath);
     await clearEmptyDirs(dirname);

@@ -27,13 +27,14 @@ describe('[Class] Storage;', () => {
     expect(data.toString()).toMatch('perform related file');
     await storage.rename('test-file-operation/operation1.txt', 'test-file-operation/operation.txt');
     await storage.link('test-file-operation/operation.txt', 'test-file-operation/link.txt');
-    data = await storage.appendData('test-file-operation/link.txt', 'link');
+    data = await storage.writeBuffer('test-file-operation/link.txt', Buffer.from('new content'));
     data = await storage.readData('test-file-operation/link.txt');
-    expect(data.toString()).toMatch('perform related file link');
+    expect(data.toString()).toMatch('new content');
     stats = await storage.getStats('test-file-operation/operation.txt');
     const afterNs = stats.mtimeNs;
     expect(afterNs > beforeNs).toBe(true);
     await storage.remove('test-file-operation/operation.txt');
+    await storage.remove('test-file-operation/link.txt');
     expect(childProcess.execSync('ls /tmp/immense').toString()).toMatch('');
   });
 });
