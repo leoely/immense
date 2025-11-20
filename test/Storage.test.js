@@ -33,6 +33,8 @@ describe('[Class] Storage;', () => {
     stats = await storage.getStats('test-file-operation/operation.txt');
     const afterNs = stats.mtimeNs;
     expect(afterNs > beforeNs).toBe(true);
+    const watcher = await storage.watch('test-file-operation/operation.txt');
+    expect(() => Storage.unwatchSync(watcher)).not.toThrowError();
     await storage.remove('test-file-operation/operation.txt');
     await storage.remove('test-file-operation/link.txt');
     expect(childProcess.execSync('ls /tmp/immense').toString()).toMatch('');

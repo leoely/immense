@@ -8,6 +8,7 @@ import writePromise from '~/lib/util/writePromise';
 import fsyncPromise from '~/lib/util/fsyncPromise';
 import openPromise from '~/lib/util/openPromise';
 import closePromise from '~/lib/util/closePromise';
+import watchPromise from '~/lib/util/watchPromise';
 
 function checkHiddenFile(fileName) {
   let ans = true;
@@ -325,6 +326,13 @@ class Storage {
     }
   }
 
+  static unwatchSync(watcher) {
+    if (watcher.constructor.name !== 'FSWatcher') {
+      throw new Error('[Error] The passed parameter watcher is not of type StatWatcher.');
+    }
+    watcher.close();
+  }
+
   async readData(place) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
@@ -347,9 +355,9 @@ class Storage {
     }
     const stats = await fsPromises.stat(filePath, { bigint: true, });
     if (stats.isSymbolicLink()) {
-      return fsPromises.readlink(filePath);
+      return await fsPromises.readlink(filePath);
     } else {
-      return fsPromises.readFile(filePath);
+      return await fsPromises.readFile(filePath);
     }
   }
 
@@ -693,6 +701,37 @@ class Storage {
       throw new Error('[Error] The file being operated on does not exist.');
     }
     return await fsPromises.stat(filePath, { bigint: true, });
+  }
+
+  async watch(place, options, listener) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    const { location, } = this;
+    const filePath = path.join(location, place);
+    const dirname = dealDirname(path.dirname(filePath));
+    const basename = path.basename(filePath);
+    if (path.extname(filePath).length >= 1) {
+      if (!checkHiddenDirs(dirname)) {
+        throw Error('[Error] Cannot operate hidden directorys.');
+      }
+      if (!checkHiddenFile(basename)) {
+        throw Error('[Error] Cannot operate hidden files.');
+      }
+      if (!await existsPromise(filePath)) {
+        throw new Error('[Error] The file being operated on does not exist.');
+      }
+      return await watchPromise(filePath, options, listener);
+    } else {
+      const dirPath = filePath;
+      if (!checkHiddenDirs(dirPath)) {
+        throw Error('[Error] Cannot operate hidden directorys.');
+      }
+      if (!await existsPromise(filePath)) {
+        throw new Error('[Error] The path to the operation does not exist.');
+      }
+      return await watchPromise(dirPath, options, listener);
+    }
   }
 
   async getPtrsHash(ptrsPath) {
