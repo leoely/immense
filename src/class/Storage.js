@@ -289,7 +289,7 @@ class Storage {
       throw new Error('[Error] The location passed in should be an absolute path.');
     }
     if (!checkHiddenDirs(location)) {
-      throw Error('[Error] The parameter location cannot contain hidden directories.');
+      throw new Error('[Error] The parameter location cannot contain hidden directories.');
     }
     if (!fs.existsSync(location)) {
       fs.mkdirSync(location, { recursive: true, });
@@ -347,11 +347,11 @@ class Storage {
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     const stats = await fsPromises.stat(filePath, { bigint: true, });
     if (stats.isSymbolicLink()) {
@@ -381,11 +381,11 @@ class Storage {
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] cannot operate hidden directorys.');
+      throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] cannot operate hidden files.');
+      throw new Error('[Error] cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'r');
     return await readPromise(fd, { position, length, });
@@ -411,11 +411,11 @@ class Storage {
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] cannot operate hidden directorys.');
+      throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] cannot operate hidden files.');
+      throw new Error('[Error] cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'a');
     await writePromise(fd, buffer, { position, });
@@ -437,11 +437,11 @@ class Storage {
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] cannot operate hidden directorys.');
+      throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] cannot operate hidden files.');
+      throw new Error('[Error] cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'a');
     await writePromise(fd, buffer);
@@ -460,43 +460,16 @@ class Storage {
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] cannot operate hidden directorys.');
+      throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] cannot operate hidden files.');
+      throw new Error('[Error] cannot operate hidden files.');
     }
     if (!await existsPromise(dirname)) {
       await fsPromises.mkdir(dirname, { recursive: true, });
     }
-    const {
-      indexPath,
-      reasonByteArray,
-    } = this;
-    const sortGatherings = getSortGatherings(place);
-    const { length, } = sortGatherings;
-    for (let i = 0; i < length; i += 1) {
-      const [code, frequency] = sortGatherings[i];
-      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
-      if (!await existsPromise(indexAbsDirs)) {
-        await fsPromises.mkdir(indexAbsDirs, { recursive: true, });
-      }
-      const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const ptrsPath = path.join(indexAbsDirs, depthName);
-      if (!await existsPromise(ptrsPath)) {
-          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
-      } else {
-        const ptrsHash = await this.getPtrsHash(ptrsPath);
-        const frequencys = ptrsHash[code];
-        if (Array.isArray(frequency)) {
-          if (!frequencys.includes(frequcy)) {
-            await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
-          }
-        } else {
-          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
-        }
-      }
-    }
+    await this.addEntireIndex(place);
     const fd = await openPromise(filePath, 'w');
     await writePromise(fd, buffer);
     await fsyncPromise(fd);
@@ -517,11 +490,11 @@ class Storage {
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     const fd = await openPromise(filePath, 'a');
     await writePromise(fd, data);
@@ -537,11 +510,11 @@ class Storage {
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
@@ -551,20 +524,8 @@ class Storage {
       if (!await existsPromise(filePath)) {
         throw new Error('[Error] The file being operated on does not exist.');
       }
-      const {
-        indexPath,
-        reasonByteArray,
-      } = this;
-      const sortGatherings = getSortGatherings(place);
-      for (let i = 0; i < sortGatherings.length; i += 1) {
-        const [code] = sortGatherings[i];
-        const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
-        const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-        const ptrsPath = path.join(indexAbsDirs, depthName);
-        await fsPromises.unlink(ptrsPath);
-        await clearEmptyDirs(indexAbsDirs, '.index');
-      }
     }
+    await this.removeEntireIndex(place);
     await fsPromises.unlink(filePath);
     await clearEmptyDirs(dirname);
   }
@@ -583,11 +544,11 @@ class Storage {
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
@@ -606,11 +567,11 @@ class Storage {
     const oldFilePath = path.join(location, oldPlace);
     const oldDirname = dealDirname(path.dirname(oldFilePath));
     if (!checkHiddenDirs(oldDirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const oldBasename = path.basename(oldFilePath);
     if (!checkHiddenFile(oldBasename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(oldFilePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
@@ -650,11 +611,11 @@ class Storage {
     const targetFilePath = path.join(location, targetPlace);
     const targetDirname = dealDirname(path.dirname(targetFilePath));
     if (!checkHiddenDirs(targetDirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const targetBasename = path.basename(targetFilePath);
     if (!checkHiddenFile(targetBasename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(targetFilePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
@@ -668,15 +629,16 @@ class Storage {
     const linkFilePath = path.join(location, linkPlace);
     const linkDirname = dealDirname(path.dirname(linkFilePath));
     if (!checkHiddenDirs(linkDirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const linkBasename = path.basename(linkFilePath);
     if (!checkHiddenFile(linkBasename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(linkFilePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
+    await this.addEntireIndex(linkPlace);
     await fsPromises.symlink(targetFilePath, linkFilePath);
   }
 
@@ -688,11 +650,11 @@ class Storage {
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
+      throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkHiddenFile(basename)) {
-      throw Error('[Error] Cannot operate hidden files.');
+      throw new Error('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
@@ -713,10 +675,10 @@ class Storage {
     const basename = path.basename(filePath);
     if (path.extname(filePath).length >= 1) {
       if (!checkHiddenDirs(dirname)) {
-        throw Error('[Error] Cannot operate hidden directorys.');
+        throw new Error('[Error] Cannot operate hidden directorys.');
       }
       if (!checkHiddenFile(basename)) {
-        throw Error('[Error] Cannot operate hidden files.');
+        throw new Error('[Error] Cannot operate hidden files.');
       }
       if (!await existsPromise(filePath)) {
         throw new Error('[Error] The file being operated on does not exist.');
@@ -725,12 +687,59 @@ class Storage {
     } else {
       const dirPath = filePath;
       if (!checkHiddenDirs(dirPath)) {
-        throw Error('[Error] Cannot operate hidden directorys.');
+        throw new Error('[Error] Cannot operate hidden directorys.');
       }
       if (!await existsPromise(filePath)) {
         throw new Error('[Error] The path to the operation does not exist.');
       }
       return await watchPromise(dirPath, options, listener);
+    }
+  }
+
+  async addEntireIndex(place) {
+    const {
+      indexPath,
+      reasonByteArray,
+    } = this;
+    const sortGatherings = getSortGatherings(place);
+    const { length, } = sortGatherings;
+    for (let i = 0; i < length; i += 1) {
+      const [code, frequency] = sortGatherings[i];
+      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
+      if (!await existsPromise(indexAbsDirs)) {
+        await fsPromises.mkdir(indexAbsDirs, { recursive: true, });
+      }
+      const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const ptrsPath = path.join(indexAbsDirs, depthName);
+      if (!await existsPromise(ptrsPath)) {
+          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+      } else {
+        const ptrsHash = await this.getPtrsHash(ptrsPath);
+        const frequencys = ptrsHash[code];
+        if (Array.isArray(frequency)) {
+          if (!frequencys.includes(frequcy)) {
+            await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+          }
+        } else {
+          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+        }
+      }
+    }
+  }
+
+  async removeEntireIndex(place) {
+    const {
+      indexPath,
+      reasonByteArray,
+    } = this;
+    const sortGatherings = getSortGatherings(place);
+    for (let i = 0; i < sortGatherings.length; i += 1) {
+      const [code] = sortGatherings[i];
+      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
+      const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const ptrsPath = path.join(indexAbsDirs, depthName);
+      await fsPromises.unlink(ptrsPath);
+      await clearEmptyDirs(indexAbsDirs, '.index');
     }
   }
 
