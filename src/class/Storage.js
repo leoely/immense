@@ -12,7 +12,7 @@ import watchPromise from '~/lib/util/watchPromise';
 
 function checkHiddenFile(fileName) {
   let ans = true;
-  if (fileName.charAt(0) === '.') {
+  if (fileName.charAt(0) === '.') {readFile
     return false;
   }
   return ans;
@@ -253,31 +253,62 @@ function toChar(value) {
   return value;
 }
 
-async function getNames(namesPath) {
-  const buffer = await fsPromises.readFile(namesPath);
-  const names = [];
+async function getNamesHash(namesPath) {
+  const fd = await openPromise(namesPath, 'r');
+  const buffer = await readPromise(namesPath);
+  const nameHash = {};
   let bytes = [];
   buffer.forEach((byte) => {
     switch (byte) {
       case 0:
-        names.push(Buffer.from(bytes).toString());
+        nameHash[(Buffer.from(bytes).toString())] = true;
         bytes = [];
         break;
       default:
         bytes.push(byte);
     }
   });
-  return ptrsHash;
+  return nameHash;
 }
 
-async function addNameToNames(namesPath, code, frequency, name) {
+async function addNameToNames(namesPath, code, frequency, place) {
   const fd = await openPromise(namesPath, 'a');
-  const nameBufArr= [];
-  nameBufArr.push(Buffer.from(name));
-  nameBufArr.push(0);
-  await writePromise(fd, Buffer.from(nameBufArr.flat()));
+  const namesBufArr= [];
+  namesBufArr.push(Buffer.from(place));
+  namesBufArr.push(0);
+  await writePromise(fd, Buffer.from(namesBufArr.flat()));
   await fsyncPromise(fd);
   await closePromise(fd);
+}
+
+async function removeNameFromNames(namesPath, code, frequency, place) {
+  const fd = await openPromise(namesPath, 'r+');
+  const buffer = await readPromise(fd);
+  const namesBufArr = [];
+  let bytes = [];
+  if (buffer[0] === 0) {
+    await fsPromises.unlink(namesPath);
+    return true;
+  } else {
+    buffer.forEach((byte) => {
+      switch (byte) {
+        case 0: {
+          const name = Buffer.from(bytes).toString();
+          if (name !== place) {
+            namesBufArr.push(bytes);
+          }
+          bytes = [];
+          break;
+        }
+        default:
+          bytes.push(byte);
+      }
+    });
+    await writePromise(fd, Buffer.from(namesBufArr.flat()));
+    await fsyncPromise(fd);
+    await closePromise(fd);
+    return false;
+  }
 }
 
 class Storage {
@@ -527,7 +558,7 @@ class Storage {
     }
     await this.removeEntireIndex(place);
     await fsPromises.unlink(filePath);
-    await clearEmptyDirs(dirname);
+    await clearEmptyDirs(dirname, '.index');
   }
 
   async truncate(place, length) {
@@ -599,7 +630,7 @@ class Storage {
     }
     await fsPromises.rename(oldFilePath, newFilePath);
     if (oldDirname !== newDirname) {
-      await clearEmptyDirs(oldDirname);
+      await clearEmptyDirs(oldDirname, '.index');
     }
   }
 
@@ -712,7 +743,7 @@ class Storage {
       const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
       if (!await existsPromise(ptrsPath)) {
-          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+        await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
       } else {
         const ptrsHash = await this.getPtrsHash(ptrsPath);
         const frequencys = ptrsHash[code];
@@ -733,19 +764,24 @@ class Storage {
       reasonByteArray,
     } = this;
     const sortGatherings = getSortGatherings(place);
-    for (let i = 0; i < sortGatherings.length; i += 1) {
-      const [code] = sortGatherings[i];
+    const { length, } = sortGatherings;
+    let nextBare = false;
+    for (let i = length - 1; i >= 0; i -= 1) {
+      const [code, frequency] = sortGatherings[i];
       const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
       const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
-      await fsPromises.unlink(ptrsPath);
-      await clearEmptyDirs(indexAbsDirs, '.index');
+      nextBare = await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1, nextBare);
+      if (nextBare === true) {
+        await clearEmptyDirs(indexAbsDirs, '.index');
+      }
     }
   }
 
   async getPtrsHash(ptrsPath) {
     const { nonZeroByteArray, } = this;
-    const buffer = await fsPromises.readFile(ptrsPath);
+    const fd = await openPromise(ptrsPath, 'r');
+    const buffer = await readPromise(fd);
     const ptrsHash = {};
     let bytes = [];
     let flag = 0;
@@ -777,14 +813,62 @@ class Storage {
   async addPtrToPtrs(ptrsPath, code, frequency) {
     const { nonZeroByteArray, } = this;
     const fd = await openPromise(ptrsPath, 'a');
-    const ptrBufArr= [];
-    ptrBufArr.push(nonZeroByteArray.fromInt(code));
-    ptrBufArr.push(0);
-    ptrBufArr.push(nonZeroByteArray.fromInt(frequency));
-    ptrBufArr.push(0);
-    await writePromise(fd, Buffer.from(ptrBufArr.flat()));
+    const ptrsBufArr= [];
+    ptrsBufArr.push(nonZeroByteArray.fromInt(code));
+    ptrsBufArr.push(0);
+    ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
+    ptrsBufArr.push(0);
+    await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
     await fsyncPromise(fd);
     await closePromise(fd);
+  }
+
+  async removePtrFromPtrs(ptrsPath, code, frequency, bare) {
+    if (bare === true) {
+      const { nonZeroByteArray, } = this;
+      const fd = await openPromise(ptrsPath, 'r+');
+      const buffer = await readPromise(fd);
+      const ptrsBufArr = [];
+      let bytes = [];
+      let status = 0;
+      let currentCode;
+      let currentFrequency;
+      buffer.forEach((byte) => {
+        switch (byte) {
+          case 0: {
+            switch (status) {
+              case 0:
+                currentCode = nonZeroByteArray.toInt(bytes);
+                status = 1;
+                break;
+              case 1:
+                currentFrequency = nonZeroByteArray.toInt(bytes);
+                if (!(currentCode === code && currentFrequency === frequency)) {
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(code));
+                  ptrsBufArr.push(0);
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
+                  ptrsBufArr.push(0);
+                }
+                status = 0;
+                break;
+            }
+            bytes = [];
+            break;
+          }
+          default:
+            bytes.push(byte);
+        }
+      });
+      if (ptrsBufArr.length === 0) {
+        await fsPromises.unlink(ptrsPath);
+        return true;
+      } else {
+        await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
+        await fsyncPromise(fd);
+        await closePromise(fd);
+        return false;
+      }
+    }
   }
 
   async addIndexFile(ptrsPath, code, frequency, name, idx, last) {
@@ -799,6 +883,22 @@ class Storage {
     } else {
       await this.addPtrToPtrs(ptrsPath, code, frequency);
     }
+  }
+
+  async removeIndexFile(ptrsPath, code, frequency, name, idx, last, nextBare) {
+    let bare = false;
+    if (idx === last) {
+      const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
+      const namesPath = path.join(namesDirPath, String(frequency));
+      bare = await removeNameFromNames(namesPath, code, frequency, name);
+      if (bare === true) {
+        await clearEmptyDirs(namesDirPath, '.index');
+        bare = await this.removePtrFromPtrs(ptrsPath, code, frequency, bare);
+      }
+    } else {
+      bare = await this.removePtrFromPtrs(ptrsPath, code, frequency, nextBare);
+    }
+    return bare;
   }
 }
 
