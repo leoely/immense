@@ -32,22 +32,24 @@ function checkHiddenDirs(paths) {
 }
 
 async function clearEmptyDirs(paths, end) {
-  const dirs = paths.split(path.sep);
-  while (true) {
-    const site = dirs.join(path.sep);
-    const directory = await fsPromises.opendir(site);
-    const entry = await directory.read();
-    await directory.close();
-    if (typeof end === 'string') {
-      if (end === dirs[dirs.length - 1]) {
+  if (await existsPromise(paths)) {
+    const dirs = paths.split(path.sep);
+    while (true) {
+      const site = dirs.join(path.sep);
+      const directory = await fsPromises.opendir(site);
+      const entry = await directory.read();
+      await directory.close();
+      if (typeof end === 'string') {
+        if (end === dirs[dirs.length - 1]) {
+          break;
+        }
+      }
+      if (entry === null) {
+        await fsPromises.rmdir(site);
+        dirs.pop();
+      } else {
         break;
       }
-    }
-    if (entry === null) {
-      await fsPromises.rmdir(site);
-      dirs.pop();
-    } else {
-      break;
     }
   }
 }
@@ -254,8 +256,7 @@ function toChar(value) {
 }
 
 async function getNamesHash(namesPath) {
-  const fd = await openPromise(namesPath, 'r');
-  const buffer = await readPromise(namesPath);
+  const buffer = await fsPromises.readFile(namesPath);
   const nameHash = {};
   let bytes = [];
   buffer.forEach((byte) => {
@@ -273,23 +274,21 @@ async function getNamesHash(namesPath) {
 
 async function addNameToNames(namesPath, code, frequency, place) {
   const fd = await openPromise(namesPath, 'a');
-  const namesBufArr= [];
-  namesBufArr.push(Buffer.from(place));
-  namesBufArr.push(0);
-  await writePromise(fd, Buffer.from(namesBufArr.flat()));
+  const namesBuf = Buffer.concat([Buffer.from(place), Buffer.alloc(1)]);
+  await writePromise(fd, namesBuf);
   await fsyncPromise(fd);
   await closePromise(fd);
 }
 
 async function removeNameFromNames(namesPath, code, frequency, place) {
-  const fd = await openPromise(namesPath, 'r+');
-  const buffer = await readPromise(fd);
+  const buffer = await fsPromises.readFile(namesPath);
   const namesBufArr = [];
   let bytes = [];
-  if (buffer[0] === 0) {
+  if (buffer.toString() === place) {
     await fsPromises.unlink(namesPath);
     return true;
   } else {
+    const fd = await openPromise(namesPath, 'w');
     buffer.forEach((byte) => {
       switch (byte) {
         case 0: {
@@ -364,7 +363,7 @@ class Storage {
     watcher.close();
   }
 
-  async readData(place) {
+  async readData(place, options) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
     }
@@ -386,9 +385,9 @@ class Storage {
     }
     const stats = await fsPromises.stat(filePath, { bigint: true, });
     if (stats.isSymbolicLink()) {
-      return await fsPromises.readlink(filePath);
+      return await fsPromises.readlink(filePath, options);
     } else {
-      return await fsPromises.readFile(filePath);
+      return await fsPromises.readFile(filePath, options);
     }
   }
 
@@ -765,23 +764,18 @@ class Storage {
     } = this;
     const sortGatherings = getSortGatherings(place);
     const { length, } = sortGatherings;
-    let nextBare = false;
     for (let i = length - 1; i >= 0; i -= 1) {
       const [code, frequency] = sortGatherings[i];
       const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
       const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
-      nextBare = await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1, nextBare);
-      if (nextBare === true) {
-        await clearEmptyDirs(indexAbsDirs, '.index');
-      }
+      await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
     }
   }
 
   async getPtrsHash(ptrsPath) {
     const { nonZeroByteArray, } = this;
-    const fd = await openPromise(ptrsPath, 'r');
-    const buffer = await readPromise(fd);
+    const buffer = await fsPromises.readFile(ptrsPath);
     const ptrsHash = {};
     let bytes = [];
     let flag = 0;
@@ -823,11 +817,10 @@ class Storage {
     await closePromise(fd);
   }
 
-  async removePtrFromPtrs(ptrsPath, code, frequency, bare) {
-    if (bare === true) {
-      const { nonZeroByteArray, } = this;
-      const fd = await openPromise(ptrsPath, 'r+');
-      const buffer = await readPromise(fd);
+  async removePtrFromPtrs(ptrsPath, code, frequency) {
+    const { nonZeroByteArray, } = this;
+    if (await existsPromise(ptrsPath)) {
+      const buffer = await fsPromises.readFile(ptrsPath);
       const ptrsBufArr = [];
       let bytes = [];
       let status = 0;
@@ -843,7 +836,7 @@ class Storage {
                 break;
               case 1:
                 currentFrequency = nonZeroByteArray.toInt(bytes);
-                if (!(currentCode === code && currentFrequency === frequency)) {
+                if (!(currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
                   ptrsBufArr.push(nonZeroByteArray.fromInt(code));
                   ptrsBufArr.push(0);
                   ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
@@ -861,12 +854,13 @@ class Storage {
       });
       if (ptrsBufArr.length === 0) {
         await fsPromises.unlink(ptrsPath);
-        return true;
+        const ptrsDirPath = path.dirname(ptrsPath);
+        await clearEmptyDirs(ptrsDirPath, '.index');
       } else {
+        const fd = await openPromise(ptrsPath, 'w');
         await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
         await fsyncPromise(fd);
         await closePromise(fd);
-        return false;
       }
     }
   }
@@ -885,20 +879,19 @@ class Storage {
     }
   }
 
-  async removeIndexFile(ptrsPath, code, frequency, name, idx, last, nextBare) {
-    let bare = false;
+  async removeIndexFile(ptrsPath, code, frequency, name, idx, last) {
+    const ptrsDirPath = path.dirname(ptrsPath);
     if (idx === last) {
       const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
       const namesPath = path.join(namesDirPath, String(frequency));
-      bare = await removeNameFromNames(namesPath, code, frequency, name);
-      if (bare === true) {
-        await clearEmptyDirs(namesDirPath, '.index');
-        bare = await this.removePtrFromPtrs(ptrsPath, code, frequency, bare);
-      }
+      await removeNameFromNames(namesPath, code, frequency, name);
+      await clearEmptyDirs(namesDirPath, '.index');
+      await this.removePtrFromPtrs(ptrsPath, code, frequency);
+      await clearEmptyDirs(ptrsDirPath, '.index');
     } else {
-      bare = await this.removePtrFromPtrs(ptrsPath, code, frequency, nextBare);
+      await this.removePtrFromPtrs(ptrsPath, code, frequency);
+      await clearEmptyDirs(ptrsDirPath, '.index');
     }
-    return bare;
   }
 }
 
