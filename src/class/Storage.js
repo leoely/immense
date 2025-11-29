@@ -749,6 +749,8 @@ class Storage {
         if (Array.isArray(frequency)) {
           if (!frequencys.includes(frequcy)) {
             await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+          } else {
+            await this.increaseCountToPtr(ptrsPath, code, frequency);
           }
         } else {
           await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
@@ -769,7 +771,7 @@ class Storage {
       const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
       const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
-      await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
+     await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
     }
   }
 
@@ -812,6 +814,8 @@ class Storage {
     ptrsBufArr.push(0);
     ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
     ptrsBufArr.push(0);
+    ptrsBufArr.push(nonZeroByteArray.fromInt(1));
+    ptrsBufArr.push(0);
     await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
     await fsyncPromise(fd);
     await closePromise(fd);
@@ -819,49 +823,64 @@ class Storage {
 
   async removePtrFromPtrs(ptrsPath, code, frequency) {
     const { nonZeroByteArray, } = this;
-    if (await existsPromise(ptrsPath)) {
-      const buffer = await fsPromises.readFile(ptrsPath);
-      const ptrsBufArr = [];
-      let bytes = [];
-      let status = 0;
-      let currentCode;
-      let currentFrequency;
-      buffer.forEach((byte) => {
-        switch (byte) {
-          case 0: {
-            switch (status) {
-              case 0:
-                currentCode = nonZeroByteArray.toInt(bytes);
-                status = 1;
-                break;
-              case 1:
-                currentFrequency = nonZeroByteArray.toInt(bytes);
-                if (!(currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
-                  ptrsBufArr.push(nonZeroByteArray.fromInt(code));
+    const buffer = await fsPromises.readFile(ptrsPath);
+    const ptrsBufArr = [];
+    let bytes = [];
+    let status = 0;
+    let currentCode;
+    let currentFrequency;
+    let currentCount;
+    buffer.forEach((byte) => {
+      switch (byte) {
+        case 0: {
+          switch (status) {
+            case 0:
+              currentCode = nonZeroByteArray.toInt(bytes);
+              status = 1;
+              break;
+            case 1:
+              currentFrequency = nonZeroByteArray.toInt(bytes);
+              status = 2;
+              break;
+            case 2:
+              currentCount = nonZeroByteArray.toInt(bytes);
+              if (currentCode === BigInt(code) && currentFrequency === BigInt(frequency)) {
+                currentCount -= 1n;
+                if (currentCount > 0) {
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(currentCode));
                   ptrsBufArr.push(0);
-                  ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(currentFrequency));
+                  ptrsBufArr.push(0);
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount));
                   ptrsBufArr.push(0);
                 }
-                status = 0;
-                break;
-            }
-            bytes = [];
-            break;
+              } else {
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(currentCode));
+                  ptrsBufArr.push(0);
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(currentFrequency));
+                  ptrsBufArr.push(0);
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount));
+                  ptrsBufArr.push(0);
+              }
+              status = 0;
+              break;
           }
-          default:
-            bytes.push(byte);
+          bytes = [];
+          break;
         }
-      });
-      if (ptrsBufArr.length === 0) {
-        await fsPromises.unlink(ptrsPath);
-        const ptrsDirPath = path.dirname(ptrsPath);
-        await clearEmptyDirs(ptrsDirPath, '.index');
-      } else {
-        const fd = await openPromise(ptrsPath, 'w');
-        await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
-        await fsyncPromise(fd);
-        await closePromise(fd);
+        default:
+          bytes.push(byte);
       }
+    });
+    if (ptrsBufArr.length === 0) {
+      await fsPromises.unlink(ptrsPath);
+      const ptrsDirPath = path.dirname(ptrsPath);
+      await clearEmptyDirs(ptrsDirPath, '.index');
+    } else {
+      const fd = await openPromise(ptrsPath, 'w');
+      await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
+      await fsyncPromise(fd);
+      await closePromise(fd);
     }
   }
 
@@ -877,6 +896,52 @@ class Storage {
     } else {
       await this.addPtrToPtrs(ptrsPath, code, frequency);
     }
+  }
+
+  async increaseCountToPtr(ptrsPath, code, frequency) {
+    const { nonZeroByteArray, } = this;
+    const buffer = await fsPromises.readFile(ptrsPath);
+    const ptrsBufArr = [];
+    let bytes = [];
+    let status = 0;
+    let currentCode;
+    let currentFrequency;
+    let currentCount;
+    buffer.forEach((byte) => {
+      switch (byte) {
+        case 0: {
+          switch (status) {
+            case 0:
+              currentCode = nonZeroByteArray.toInt(bytes);
+              status = 1;
+              break;
+            case 1:
+              currentFrequency = nonZeroByteArray.toInt(bytes);
+              status = 2;
+              break;
+            case 2:
+              currentCode = nonZeroByteArray.toInt(bytes);
+              ptrsBufArr.push(nonZeroByteArray.fromInt(code));
+              ptrsBufArr.push(0);
+              ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
+              ptrsBufArr.push(0);
+              if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
+                ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount) + 1);
+                ptrsBufArr.push(0);
+              } else {
+                ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount));
+                ptrsBufArr.push(0);
+              }
+              status = 0;
+              break;
+          }
+          bytes = [];
+          break;
+        }
+        default:
+          bytes.push(byte);
+      }
+    });
   }
 
   async removeIndexFile(ptrsPath, code, frequency, name, idx, last) {
