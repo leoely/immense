@@ -286,15 +286,16 @@ async function removeNameFromNames(namesPath, code, frequency, place) {
   let bytes = [];
   if (buffer.toString() === place) {
     await fsPromises.unlink(namesPath);
-    return true;
   } else {
-    const fd = await openPromise(namesPath, 'w');
-    buffer.forEach((byte) => {
+    let currentIdx;
+    buffer.forEach((byte, idx) => {
       switch (byte) {
         case 0: {
           const name = Buffer.from(bytes).toString();
           if (name !== place) {
             namesBufArr.push(bytes);
+          } else {
+            currentIdx = idx;
           }
           bytes = [];
           break;
@@ -303,10 +304,16 @@ async function removeNameFromNames(namesPath, code, frequency, place) {
           bytes.push(byte);
       }
     });
-    await writePromise(fd, Buffer.from(namesBufArr.flat()));
-    await fsyncPromise(fd);
-    await closePromise(fd);
-    return false;
+    const { length, } = namesBufArr;
+    if (length >= 2 && currentIdx === buffer.length - 1) {
+      const lastNameBufPosition = length - 2;
+      await fsPromises.truncate(buffer.length - namesBufArr[lastNameBufPosition].length - 1);
+    } else {
+      const fd = await openPromise(namesPath, 'w');
+      await writePromise(fd, Buffer.from(namesBufArr.flat()));
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    }
   }
 }
 
@@ -912,7 +919,11 @@ class Storage {
     let currentCode;
     let currentFrequency;
     let currentCount;
-    buffer.forEach((byte) => {
+    let currentIdx;
+    let nextCountBuf;
+    let update = false;
+    outer: for (let i = 0; i < buffer.length; i += 1) {
+      const byte = buffer[i];
       switch (byte) {
         case 0: {
           switch (status) {
@@ -931,8 +942,17 @@ class Storage {
               ptrsBufArr.push(nonZeroByteArray.fromInt(currentFrequency));
               ptrsBufArr.push(0);
               if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
-                ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount) + 1);
-                ptrsBufArr.push(0);
+                const currentCountBuf = nonZeroByteArray.fromInt(currentCount);
+                const nextCount = currentCount + 1n;
+                nextCountBuf = nonZeroByteArray.fromInt(nextCount);
+                if (currentCountBuf.length === nextCountBuf.length) {
+                  currentIdx = i;
+                  update = true;
+                  break outer;
+                } else {
+                  ptrsBufArr.push(nonZeroByteArray.fromInt(nextCount));
+                  ptrsBufArr.push(0);
+                }
               } else {
                 ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount));
                 ptrsBufArr.push(0);
@@ -946,11 +966,16 @@ class Storage {
         default:
           bytes.push(byte);
       }
-    });
-    const fd = await openPromise(ptrsPath, 'w');
-    await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
-    await fsyncPromise(fd);
-    await closePromise(fd);
+    }
+    if (update === true) {
+      const fd = await openPromise(ptrsPath, 'a');
+      await writePromise(fd, Buffer.from(nextCountBuf), { position: currentIdx - nextCountBuf.length, });
+    } else {
+      const fd = await openPromise(ptrsPath, 'w');
+      await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    }
   }
 
   async removeIndexFile(ptrsPath, code, frequency, name, idx, last) {
