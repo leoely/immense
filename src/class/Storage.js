@@ -734,7 +734,7 @@ class Storage {
     const sortGatherings = getSortGatherings(place);
     const { length, } = sortGatherings;
     for (let i = 0; i < length; i += 1) {
-      const [code, frequency] = sortGatherings[i];
+      let [code, frequency] = sortGatherings[i];
       const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
       if (!await existsPromise(indexAbsDirs)) {
         await fsPromises.mkdir(indexAbsDirs, { recursive: true, });
@@ -745,9 +745,10 @@ class Storage {
         await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
       } else {
         const ptrsHash = await this.getPtrsHash(ptrsPath);
-        const frequencys = ptrsHash[code];
-        if (Array.isArray(frequency)) {
-          if (!frequencys.includes(frequcy)) {
+        const frequencies = ptrsHash[code];
+        if (Array.isArray(frequencies)) {
+          frequency = BigInt(frequency);
+          if (!frequencies.includes(frequency)) {
             await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
           } else {
             await this.increaseCountToPtr(ptrsPath, code, frequency);
@@ -790,12 +791,16 @@ class Storage {
               key = nonZeroByteArray.toInt(bytes);
               flag = 1;
               break;
-            default:
+            case 1:
               if (ptrsHash[key] === undefined) {
                 ptrsHash[key] = [];
               }
               ptrsHash[key].push(nonZeroByteArray.toInt(bytes));
+              flag = 2;
+              break;
+            case 2:
               flag = 0;
+              break;
           }
           bytes = [];
           break;
@@ -920,10 +925,10 @@ class Storage {
               status = 2;
               break;
             case 2:
-              currentCode = nonZeroByteArray.toInt(bytes);
-              ptrsBufArr.push(nonZeroByteArray.fromInt(code));
+              currentCount = nonZeroByteArray.toInt(bytes);
+              ptrsBufArr.push(nonZeroByteArray.fromInt(currentCode));
               ptrsBufArr.push(0);
-              ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
+              ptrsBufArr.push(nonZeroByteArray.fromInt(currentFrequency));
               ptrsBufArr.push(0);
               if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
                 ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount) + 1);
@@ -942,6 +947,10 @@ class Storage {
           bytes.push(byte);
       }
     });
+    const fd = await openPromise(ptrsPath, 'w');
+    await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
+    await fsyncPromise(fd);
+    await closePromise(fd);
   }
 
   async removeIndexFile(ptrsPath, code, frequency, name, idx, last) {
