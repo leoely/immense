@@ -638,6 +638,8 @@ class Storage {
     if (oldDirname !== newDirname) {
       await clearEmptyDirs(oldDirname, '.index');
     }
+    await this.removeEntireIndex(oldPlace);
+    await this.addEntireIndex(newPlace);
   }
 
   async link(targetPlace, linkPlace) {
