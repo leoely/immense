@@ -6,7 +6,11 @@ import Storage from '~/class/Storage';
 describe('[Class] Storage;', () => {
   test('Storage should be able to complete basic file operations.', async () => {
     const storage = new Storage('/tmp/immense');
+    let ans = await storage.exists('test-file-operation/operation.txt');
+    expect(ans).toBe(false);
     await storage.addBuffer('test-file-operation/operation.txt', Buffer.from('perform related file operations.'));
+    ans = await storage.exists('test-file-operation/operation.txt');
+    expect(ans).toBe(true);
     let data = await storage.readData('test-file-operation/operation.txt');
     expect(data.toString()).toMatch('perform related file operations.');
     let buffer = await storage.readBufferPiece('test-file-operation/operation.txt', 8, 7);
@@ -26,7 +30,11 @@ describe('[Class] Storage;', () => {
     data = await storage.readData('test-file-operation/operation1.txt');
     expect(data.toString()).toMatch('perform related file');
     await storage.rename('test-file-operation/operation1.txt', 'test-file-operation/operation.txt');
+    ans = await storage.exists('test-file-operation/link.txt');
+    expect(ans).toBe(false);
     await storage.link('test-file-operation/operation.txt', 'test-file-operation/link.txt');
+    ans = await storage.exists('test-file-operation/link.txt');
+    expect(ans).toBe(true);
     data = await storage.writeBuffer('test-file-operation/link.txt', Buffer.from('new content'));
     data = await storage.readData('test-file-operation/link.txt');
     expect(data.toString()).toMatch('new content');

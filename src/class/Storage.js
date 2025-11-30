@@ -255,23 +255,6 @@ function toChar(value) {
   return value;
 }
 
-async function getNamesHash(namesPath) {
-  const buffer = await fsPromises.readFile(namesPath);
-  const nameHash = {};
-  let bytes = [];
-  buffer.forEach((byte) => {
-    switch (byte) {
-      case 0:
-        nameHash[(Buffer.from(bytes).toString())] = true;
-        bytes = [];
-        break;
-      default:
-        bytes.push(byte);
-    }
-  });
-  return nameHash;
-}
-
 async function addNameToNames(namesPath, code, frequency, place) {
   const fd = await openPromise(namesPath, 'a');
   const namesBuf = Buffer.concat([Buffer.from(place), Buffer.alloc(1)]);
@@ -280,7 +263,7 @@ async function addNameToNames(namesPath, code, frequency, place) {
   await closePromise(fd);
 }
 
-async function removeNameFromNames(namesPath, code, frequency, place) {
+async function removeNameFromNames(namesPath, place) {
   const buffer = await fsPromises.readFile(namesPath);
   const namesBufArr = [];
   let bytes = [];
@@ -314,6 +297,32 @@ async function removeNameFromNames(namesPath, code, frequency, place) {
       await fsyncPromise(fd);
       await closePromise(fd);
     }
+  }
+}
+
+async function getNamesHash(namesPath) {
+  const buffer = await fsPromises.readFile(namesPath);
+  const nameHash = {};
+  let bytes = [];
+  buffer.forEach((byte) => {
+    switch (byte) {
+      case 0:
+        nameHash[(Buffer.from(bytes).toString())] = true;
+        bytes = [];
+        break;
+      default:
+        bytes.push(byte);
+    }
+  });
+  return nameHash;
+}
+
+async function checkNameFromNames(namesPath, place) {
+  const namesHash = await getNamesHash(namesPath);
+  if (namesHash[place] === true) {
+    return true;
+  } else {
+    return false;
   }
 }
 
@@ -735,6 +744,26 @@ class Storage {
     }
   }
 
+  async exists(place) {
+    const {
+      indexPath,
+      reasonByteArray,
+    } = this;
+    const sortGatherings = getSortGatherings(place);
+    const { length, } = sortGatherings;
+    for (let i = 0; i < length; i += 1) {
+      const [code, frequency] = sortGatherings[i];
+      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
+      const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const ptrsPath = path.join(indexAbsDirs, depthName);
+      const ans = await this.checkIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
+      if (ans === false) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   async addEntireIndex(place) {
     const {
       indexPath,
@@ -781,7 +810,7 @@ class Storage {
       const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
       const depthName = Buffer.from(reasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
-     await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
+      await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
     }
   }
 
@@ -833,6 +862,21 @@ class Storage {
     await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
     await fsyncPromise(fd);
     await closePromise(fd);
+  }
+
+  async checkPtrFromPtrs(ptrsPath, code, frequency) {
+    const ptrsHash = await this.getPtrsHash(ptrsPath);
+    const frequencies = ptrsHash[code];
+    if (Array.isArray(frequencies)) {
+      frequency = BigInt(frequency);
+      if (!frequencies.includes(frequency)) {
+        return false;
+      } else {
+        return true;
+      }
+    } else {
+      return false;
+    }
   }
 
   async removePtrFromPtrs(ptrsPath, code, frequency) {
@@ -992,6 +1036,25 @@ class Storage {
     } else {
       await this.removePtrFromPtrs(ptrsPath, code, frequency);
       await clearEmptyDirs(ptrsDirPath, '.index');
+    }
+  }
+
+  async checkIndexFile(ptrsPath, code, frequency, name, idx, last) {
+    if (await existsPromise(ptrsPath)) {
+      const ptrsDirPath = path.dirname(ptrsPath);
+      if (idx === last) {
+        const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
+        const namesPath = path.join(namesDirPath, String(frequency));
+        const ans = await this.checkPtrFromPtrs(ptrsPath, code, frequency);
+        if (ans === false) {
+          return ans;
+        }
+        return await checkNameFromNames(namesPath, name);
+      } else {
+        return await this.checkPtrFromPtrs(ptrsPath, code, frequency);
+      }
+    } else {
+      return false;
     }
   }
 }
