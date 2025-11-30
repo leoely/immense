@@ -355,7 +355,7 @@ class Storage {
     }
     this.indexPath = indexPath;
     this.reasonByteArray = new ByteArray({ size: 202n, });
-    this.nonZeroByteArray = new ByteArray({ size: 256n, shift: 1n, });
+    this.extractToOneByteArray = new ByteArray({ size: 256n, shift: 2n, });
   }
 
   dealOptions(options) {
@@ -781,6 +781,7 @@ class Storage {
       const ptrsPath = path.join(indexAbsDirs, depthName);
       if (!await existsPromise(ptrsPath)) {
         await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+          await this.makeCountFile(ptrsPath + 'c', code, frequency);
       } else {
         const ptrsHash = await this.getPtrsHash(ptrsPath);
         const frequencies = ptrsHash[code];
@@ -789,10 +790,11 @@ class Storage {
           if (!frequencies.includes(frequency)) {
             await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
           } else {
-            await this.increaseCountToPtr(ptrsPath, code, frequency);
+            await this.increaseCountToCounts(ptrsPath + 'c', code, frequency);
           }
         } else {
           await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+          await this.makeCountFile(ptrsPath + 'c', code, frequency);
         }
       }
     }
@@ -813,55 +815,100 @@ class Storage {
       await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
     }
   }
-
   async getPtrsHash(ptrsPath) {
-    const { nonZeroByteArray, } = this;
-    const buffer = await fsPromises.readFile(ptrsPath);
-    const ptrsHash = {};
-    let bytes = [];
-    let flag = 0;
-    let key;
-    buffer.forEach((byte) => {
-      switch (byte) {
-        case 0:
-          switch (flag) {
-            case 0:
-              key = nonZeroByteArray.toInt(bytes);
-              flag = 1;
-              break;
-            case 1:
-              if (ptrsHash[key] === undefined) {
-                ptrsHash[key] = [];
-              }
-              ptrsHash[key].push(nonZeroByteArray.toInt(bytes));
-              flag = 2;
-              break;
-            case 2:
-              flag = 0;
-              break;
-          }
-          bytes = [];
-          break;
-        default:
-          bytes.push(byte);
-      }
-    });
-    return ptrsHash;
+    if (await existsPromise(ptrsPath)) {
+      const { extractToOneByteArray, } = this;
+      const buffer = await fsPromises.readFile(ptrsPath);
+      const ptrsHash = {};
+      let bytes = [];
+      let flag = 0;
+      let key;
+      buffer.forEach((byte) => {
+        switch (byte) {
+          case 0:
+            switch (flag) {
+              case 0:
+                key = extractToOneByteArray.toInt(bytes);
+                if (ptrsHash[key] === undefined) {
+                  ptrsHash[key] = [];
+                }
+                flag = 1;
+                break;
+              case 1:
+                flag = 0;
+                break;
+            }
+            bytes = [];
+            break;
+          case 1:
+            ptrsHash[key].push(extractToOneByteArray.toInt(bytes));
+            bytes = [];
+            break;
+          default:
+            bytes.push(byte);
+        }
+      });
+      return ptrsHash;
+    } else {
+      return {};
+    }
   }
 
   async addPtrToPtrs(ptrsPath, code, frequency) {
-    const { nonZeroByteArray, } = this;
-    const fd = await openPromise(ptrsPath, 'a');
+    const { extractToOneByteArray, } = this;
     const ptrsBufArr= [];
-    ptrsBufArr.push(nonZeroByteArray.fromInt(code));
-    ptrsBufArr.push(0);
-    ptrsBufArr.push(nonZeroByteArray.fromInt(frequency));
-    ptrsBufArr.push(0);
-    ptrsBufArr.push(nonZeroByteArray.fromInt(1));
-    ptrsBufArr.push(0);
-    await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
-    await fsyncPromise(fd);
-    await closePromise(fd);
+    if (await existsPromise(ptrsPath)) {
+      const buffer = await fsPromises.readFile(ptrsPath);
+      let bytes = [];
+      let flag = 0;
+      let currentCode;
+      buffer.forEach((byte) => {
+        switch (byte) {
+          case 0:
+            switch (flag) {
+              case 0: {
+                currentCode = extractToOneByteArray.toInt(bytes);
+                ptrsBufArr.push(bytes);
+                ptrsBufArr.push(0);
+                bytes = [];
+                flag = 1;
+                break;
+              }
+              case 1:
+                if (currentCode === code) {
+                  const frequency = extractToOneByteArray.fromInt(bytes);
+                  ptrsBufArr.push(bytes);
+                }
+                ptrsBufArr.push(0);
+                flag = 0;
+                bytes = [];
+                break;
+            }
+            break;
+          case 1: {
+            const frequency = extractToOneByteArray.toInt(bytes);
+            ptrsBufArr.push(bytes);
+            ptrsBufArr.push(1);
+            bytes = [];
+            break;
+          }
+          default:
+            bytes.push(byte);
+        }
+      });
+      const fd = await openPromise(ptrsPath, 'w');
+      await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    } else {
+      ptrsBufArr.push(extractToOneByteArray.fromInt(code));
+      ptrsBufArr.push(0);
+      ptrsBufArr.push(extractToOneByteArray.fromInt(frequency));
+      ptrsBufArr.push(1);
+      ptrsBufArr.push(0);
+      const fd = await openPromise(ptrsPath, 'w');
+      await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
+    }
   }
 
   async checkPtrFromPtrs(ptrsPath, code, frequency) {
@@ -956,12 +1003,12 @@ class Storage {
     }
   }
 
-  async increaseCountToPtr(ptrsPath, code, frequency) {
-    const { nonZeroByteArray, } = this;
-    const buffer = await fsPromises.readFile(ptrsPath);
-    const ptrsBufArr = [];
+  async increaseCountToCounts(countsPath, code, frequency) {
+    const { extractToOneByteArray, } = this;
+    const buffer = await fsPromises.readFile(countsPath);
+    const countsBufArr = [];
     let bytes = [];
-    let status = 0;
+    let flag = 0;
     let currentCode;
     let currentFrequency;
     let currentCount;
@@ -971,57 +1018,78 @@ class Storage {
     outer: for (let i = 0; i < buffer.length; i += 1) {
       const byte = buffer[i];
       switch (byte) {
-        case 0: {
-          switch (status) {
+        case 0:
+          switch (flag) {
             case 0:
-              currentCode = nonZeroByteArray.toInt(bytes);
-              status = 1;
-              break;
-            case 1:
-              currentFrequency = nonZeroByteArray.toInt(bytes);
-              status = 2;
+              currentCode = extractToOneByteArray.toInt(bytes);
+              flag = 1;
               break;
             case 2:
-              currentCount = nonZeroByteArray.toInt(bytes);
-              ptrsBufArr.push(nonZeroByteArray.fromInt(currentCode));
-              ptrsBufArr.push(0);
-              ptrsBufArr.push(nonZeroByteArray.fromInt(currentFrequency));
-              ptrsBufArr.push(0);
+              countsBufArr.push(0);
+              flag = 0;
+              break;
+          }
+          break;
+        case 1:
+          switch (flag) {
+            case 1:
+              currentFrequency = extractToOneByteArray.toInt(bytes);
+              flag = 2;
+              break;
+            case 2:
+              currentCount = extractToOneByteArray.toInt(bytes);
+              countsBufArr.push(extractToOneByteArray.fromInt(currentCode));
+              countsBufArr.push(1);
+              countsBufArr.push(extractToOneByteArray.fromInt(currentFrequency));
+              countsBufArr.push(1);
               if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
-                const currentCountBuf = nonZeroByteArray.fromInt(currentCount);
+                const currentCountBuf = extractToOneByteArray.fromInt(currentCount);
                 const nextCount = currentCount + 1n;
-                nextCountBuf = nonZeroByteArray.fromInt(nextCount);
+                nextCountBuf = extractToOneByteArray.fromInt(nextCount);
                 if (currentCountBuf.length === nextCountBuf.length) {
                   currentIdx = i;
                   update = true;
                   break outer;
                 } else {
-                  ptrsBufArr.push(nonZeroByteArray.fromInt(nextCount));
-                  ptrsBufArr.push(0);
+                  countsBufArr.push(extractToOneByteArray.fromInt(nextCount));
+                  countsBufArr.push(1);
                 }
               } else {
-                ptrsBufArr.push(nonZeroByteArray.fromInt(currentCount));
-                ptrsBufArr.push(0);
+                countsBufArr.push(extractToOneByteArray.fromInt(currentCount));
+                countsBufArr.push(1);
               }
-              status = 0;
+              flag = 1;
               break;
           }
-          bytes = [];
-          break;
-        }
         default:
           bytes.push(byte);
       }
     }
     if (update === true) {
-      const fd = await openPromise(ptrsPath, 'a');
+      const fd = await openPromise(countsPath, 'a');
       await writePromise(fd, Buffer.from(nextCountBuf), { position: currentIdx - nextCountBuf.length, });
     } else {
-      const fd = await openPromise(ptrsPath, 'w');
-      await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
+      const fd = await openPromise(countsPath, 'w');
+      await writePromise(fd, Buffer.from(countsBufArr.flat()));
       await fsyncPromise(fd);
       await closePromise(fd);
     }
+  }
+
+  async makeCountFile(countsPath, code, frequency) {
+    const { extractToOneByteArray, } = this;
+    const countsBufArr = [];
+    countsBufArr.push(extractToOneByteArray.fromInt(code));
+    countsBufArr.push(0);
+    countsBufArr.push(extractToOneByteArray.fromInt(frequency));
+    countsBufArr.push(1);
+    countsBufArr.push(extractToOneByteArray.fromInt(1));
+    countsBufArr.push(1);
+    countsBufArr.push(0);
+    const fd = await openPromise(countsPath, 'w');
+    await writePromise(fd, Buffer.from(countsBufArr.flat()));
+    await fsyncPromise(fd);
+    await closePromise(fd);
   }
 
   async removeIndexFile(ptrsPath, code, frequency, name, idx, last) {
