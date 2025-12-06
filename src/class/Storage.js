@@ -328,6 +328,24 @@ async function checkNameFromNames(namesPath, place) {
   }
 }
 
+function getCountsPathFromPtrsPath(ptrsPath) {
+  return ptrsPath + '6';
+}
+
+function getCountFromCountHash(countsHash, code, frequency) {
+  const innerHash = countsHash[code];
+  if (typeof innerHash === 'object') {
+    const count = countsHash[code][frequency];
+    if (typeof count === 'number') {
+      return count;
+    } else {
+      return 0;
+    }
+  } else {
+    return 0;
+  }
+}
+
 class Storage {
   constructor(location, options = {}) {
     if (typeof location !== 'string') {
@@ -783,7 +801,7 @@ class Storage {
       const ptrsPath = path.join(indexAbsDirs, depthName);
       if (!await existsPromise(ptrsPath)) {
           await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
-          await this.makeCountFile(ptrsPath + '6', code, frequency);
+          await this.makeCountFile(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
       } else {
         const ptrsHash = await this.getPtrsHash(ptrsPath);
         const frequencies = ptrsHash[code];
@@ -792,11 +810,11 @@ class Storage {
           if (!frequencies.includes(frequency)) {
             await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
           } else {
-            await this.increaseCountToCounts(ptrsPath + '6', code, frequency);
+            await this.increaseCountToCounts(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
           }
         } else {
           await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
-          await this.makeCountFile(ptrsPath + '6', code, frequency);
+          await this.makeCountFile(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
         }
       }
     }
@@ -854,6 +872,47 @@ class Storage {
     } else {
       return {};
     }
+  }
+
+  async getCountsHash(countsPath) {
+    const { extractToTwoByteArray, } = this;
+    const buffer = await fsPromises.readFile(countsPath);
+    const countsHash = {};
+    let bytes = [];
+    let flag = 0;
+    let currentCode;
+    let currentFrequency;
+    buffer.forEach((byte) => {
+      switch (byte) {
+        case 0:
+          switch (flag) {
+            case 0:
+              currentCode = extractToTwoByteArray.toInt(bytes);
+              countsHash[currentCode] = {};
+              flag = 1;
+              break;
+            case 2:
+              flag = 0;
+              break;
+          }
+          break;
+        case 1:
+          switch (flag) {
+            case 1:
+              currentFrequency = extractToTwoByteArray.toInt(bytes);
+              flag = 2;
+              break;
+            case 2:
+              const count = extractToTwoByteArray.toInt(bytes);
+              countsHash[currentCode][currentFrequency] = count;
+              flag = 1;
+              break;
+          }
+        default:
+          bytes.push(byte);
+      }
+    });
+    return countsHash;
   }
 
   async addPtrToPtrs(ptrsPath, code, frequency) {
@@ -1204,13 +1263,19 @@ class Storage {
       const namesPath = path.join(namesDirPath, String(frequency));
       await removeNameFromNames(namesPath, code, frequency, name);
       await clearEmptyDirs(namesDirPath, '.index');
-      await this.reduceCountToCounts(ptrsPath + '6', code, frequency);
-      await this.removePtrFromPtrs(ptrsPath, code, frequency);
-      await clearEmptyDirs(ptrsDirPath, '.index');
+      await this.reduceCountToCounts(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
+      const countsHash = await getCountsHash(getCountsPathFromPtrsPath(ptrsPath));
+      if (countsHash[code] === 0) {
+        await this.removePtrFromPtrs(ptrsPath, code, frequency);
+        await clearEmptyDirs(ptrsDirPath, '.index');
+      }
     } else {
-      await this.reduceCountToCounts(ptrsPath + '6', code, frequency);
-      await this.removePtrFromPtrs(ptrsPath, code, frequency);
-      await clearEmptyDirs(ptrsDirPath, '.index');
+      await this.reduceCountToCounts(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
+      const countsHash = await getCountsHash(getCountsPathFromPtrsPath(ptrsPath));
+      if (countsHash[code] === 0) {
+        await this.removePtrFromPtrs(ptrsPath, code, frequency);
+        await clearEmptyDirs(ptrsDirPath, '.index');
+      }
     }
   }
 
