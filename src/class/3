@@ -921,7 +921,6 @@ class Storage {
             bytes.push(byte);
         }
       });
-      console.log(countsHash);
     }
     return countsHash;
   }
@@ -1190,6 +1189,7 @@ class Storage {
     let currentIdx;
     let beforeCountBuf;
     let update = false;
+    console.log(buffer);
     outer: for (let i = 0; i < buffer.length; i += 1) {
       const byte = buffer[i];
       switch (byte) {
@@ -1241,13 +1241,10 @@ class Storage {
                   countsBufArr.push(1);
                 }
               } else {
-                countsBufArr.push(extractToTwoByteArray.fromInt(currentCode));
-                countsBufArr.push(0);
-                countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
-                countsBufArr.push(1);
                 countsBufArr.push(extractToTwoByteArray.fromInt(currentCount));
                 countsBufArr.push(1);
               }
+              countsBufArr.push(0);
               flag = 1;
               break;
           }
