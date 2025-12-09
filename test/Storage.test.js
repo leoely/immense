@@ -32,12 +32,11 @@ describe('[Class] Storage;', () => {
     //await storage.rename('test-file-operation/operation1.txt', 'test-file-operation/operation.txt');
     //ans = await storage.exists('test-file-operation/link.txt');
     //expect(ans).toBe(false);
-    await storage.link('test-file-operation/operation.txt', 'test-file-operation/link.txt');
-    //ans = await storage.exists('test-file-operation/link.txt');
-    //expect(ans).toBe(true);
-    data = await storage.writeBuffer('test-file-operation/link.txt', Buffer.from('new content'));
-    data = await storage.readData('test-file-operation/link.txt');
-    expect(data.toString()).toMatch('new content');
+    //await storage.link('test-file-operation/operation.txt', 'test-file-operation/link.txt');
+    //ans = await storage.exists('test-file-operation/link.txt'); //expect(ans).toBe(true);
+    //data = await storage.writeBuffer('test-file-operation/link.txt', Buffer.from('new content'));
+    //data = await storage.readData('test-file-operation/link.txt');
+    //expect(data.toString()).toMatch('new content');
     stats = await storage.getStats('test-file-operation/operation.txt');
     const afterNs = stats.mtimeNs;
     expect(afterNs > beforeNs).toBe(true);

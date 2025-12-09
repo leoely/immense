@@ -976,7 +976,6 @@ class Storage {
           case 1: {
             const frequency = extractToTwoByteArray.toInt(bytes);
             ptrsBufArr.push(bytes);
-            ptrsBufArr.push(1);
             bytes = [];
             break;
           }
@@ -992,7 +991,6 @@ class Storage {
       ptrsBufArr.push(extractToTwoByteArray.fromInt(code));
       ptrsBufArr.push(0);
       ptrsBufArr.push(extractToTwoByteArray.fromInt(frequency));
-      ptrsBufArr.push(1);
       ptrsBufArr.push(0);
       const fd = await openPromise(ptrsPath, 'w');
       await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
@@ -1046,8 +1044,6 @@ class Storage {
                 return;
               }
               if (currentFrequenciesBuf.length > 0) {
-                ptrsBufArr.push(extractToTwoByteArray.fromInt(currentCode));
-                ptrsBufArr.push(0);
                 ptrsBufArr = ptrsBufArr.concat(currentFrequenciesBuf);
                 ptrsBufArr.push(0);
               }
@@ -1061,8 +1057,7 @@ class Storage {
           const currentFrequency = extractToTwoByteArray.toInt(bytes);
           if (!(currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
             if (bytes.length > 0) {
-              currentFrequenciesBuf.push(bytes);
-              currentFrequenciesBuf.push(1);
+              currentFrequenciesBuf.push(currentCode);
             }
           } else {
             byteCount = bytes.length;
