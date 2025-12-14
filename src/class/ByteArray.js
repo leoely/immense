@@ -38,14 +38,14 @@ class ByteArray {
     } = this;
     n = BigInt(n);
     const ans = [];
-    if (n > (size - 1n - shift)) {
-      while (n > size - shift) {
-        const q = n % (size - shift);
-        ans.push(Number(q + shift));
-        n = n / size - shift;
+    if (n > (size - 2n - shift)) {
+      while (n > size - shift - 1n) {
+        const q = n % (size - shift - 1n);
+        ans.push(Number(q + shift - 1n));
+        n = n / size - shift - 1n;
       }
     }
-    ans.push(Number(n + shift));
+    ans.push(Number(n + shift - 1n));
     return ans;
   }
 
@@ -58,7 +58,7 @@ class ByteArray {
     } = this;
     let n = 0n;
     for (let i = 0n; i < buf.length; i += 1n) {
-      n += (BigInt(buf[i]) - shift) * (size - shift) ** i;
+      n += (BigInt(buf[i]) - shift - 1n) * (size - shift - 1n) ** i;
     }
     return n;
   }

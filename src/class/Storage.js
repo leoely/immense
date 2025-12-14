@@ -800,8 +800,8 @@ class Storage {
       const depthName = Buffer.from(extractToOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
       if (!await existsPromise(ptrsPath)) {
-          await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
-          await this.makeCountFile(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
+        await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
+        await this.makeCountFile(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
       } else {
         const ptrsHash = await this.getPtrsHash(ptrsPath);
         const frequencies = ptrsHash[code];
@@ -835,6 +835,7 @@ class Storage {
       await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
     }
   }
+
   async getPtrsHash(ptrsPath) {
     if (await existsPromise(ptrsPath)) {
       const { extractToTwoByteArray, } = this;
@@ -877,15 +878,13 @@ class Storage {
   async getCountsHash(countsPath) {
     const { extractToTwoByteArray, } = this;
     const countsHash = {};
-    console.log(countsPath);
-    console.log(await existsPromise(countsPath));
     if (await existsPromise(countsPath)) {
       const buffer = await fsPromises.readFile(countsPath);
-      console.log(buffer);
       let bytes = [];
       let flag = 0;
       let currentCode;
       let currentFrequency;
+      console.log('------------');
       buffer.forEach((byte) => {
         switch (byte) {
           case 0:
@@ -910,6 +909,7 @@ class Storage {
                 flag = 2;
                 break;
               case 2:
+                console.log(bytes);
                 const count = extractToTwoByteArray.toInt(bytes);
                 bytes = [];
                 countsHash[currentCode][currentFrequency] = count;
@@ -921,14 +921,14 @@ class Storage {
             bytes.push(byte);
         }
       });
-      console.log(countsHash);
+      console.log('------------');
     }
     return countsHash;
   }
 
   async addPtrToPtrs(ptrsPath, code, frequency) {
     const { extractToTwoByteArray, } = this;
-    const ptrsBufArr= [];
+    const ptrsBufArr = [];
     if (await existsPromise(ptrsPath)) {
       const buffer = await fsPromises.readFile(ptrsPath);
       let bytes = [];
