@@ -798,6 +798,7 @@ class Storage {
         await fsPromises.mkdir(indexAbsDirs, { recursive: true, });
       }
       const depthName = Buffer.from(extractToOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const depthName1 = Buffer.from(extractToOneReasonByteArray.fromInt(0)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
       if (!await existsPromise(ptrsPath)) {
         await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
@@ -856,13 +857,10 @@ class Storage {
                 flag = 1;
                 break;
               case 1:
+                ptrsHash[key].push(extractToTwoByteArray.toInt(bytes));
                 flag = 0;
                 break;
             }
-            bytes = [];
-            break;
-          case 1:
-            ptrsHash[key].push(extractToTwoByteArray.toInt(bytes));
             bytes = [];
             break;
           default:
@@ -879,12 +877,12 @@ class Storage {
     const { extractToTwoByteArray, } = this;
     const countsHash = {};
     if (await existsPromise(countsPath)) {
+      let all = true;
       const buffer = await fsPromises.readFile(countsPath);
       let bytes = [];
       let flag = 0;
       let currentCode;
       let currentFrequency;
-      console.log('------------');
       buffer.forEach((byte) => {
         switch (byte) {
           case 0:
@@ -909,8 +907,10 @@ class Storage {
                 flag = 2;
                 break;
               case 2:
-                console.log(bytes);
                 const count = extractToTwoByteArray.toInt(bytes);
+                if (count !== 0) {
+                  all = false;
+                }
                 bytes = [];
                 countsHash[currentCode][currentFrequency] = count;
                 flag = 1;
@@ -921,7 +921,9 @@ class Storage {
             bytes.push(byte);
         }
       });
-      console.log('------------');
+      if (all === false) {
+        await fsPromises.unlink(countsPath);
+      }
     }
     return countsHash;
   }
@@ -1135,29 +1137,30 @@ class Storage {
             case 2:
               currentCount = extractToTwoByteArray.toInt(bytes);
               bytes = [];
-              countsBufArr.push(extractToTwoByteArray.fromInt(currentCode));
-              countsBufArr.push(1);
-              countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
-              countsBufArr.push(1);
               if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
                 const currentCountBuf = extractToTwoByteArray.fromInt(currentCount);
                 const nextCount = currentCount + 1n;
                 nextCountBuf = extractToTwoByteArray.fromInt(nextCount);
-                if (currentCountBuf.length === nextCountBuf.length) {
+                if (currentCountBuf.length === nextCountBuf.length && i === buffer.length - 2) {
                   currentIdx = i;
                   update = true;
                   break outer;
                 } else {
+                  countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
+                  countsBufArr.push(1);
                   countsBufArr.push(extractToTwoByteArray.fromInt(nextCount));
                   countsBufArr.push(1);
                 }
               } else {
+                countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
+                countsBufArr.push(1);
                 countsBufArr.push(extractToTwoByteArray.fromInt(currentCount));
                 countsBufArr.push(1);
               }
               flag = 1;
               break;
           }
+          break;
         default:
           bytes.push(byte);
       }
@@ -1210,12 +1213,11 @@ class Storage {
               break;
             case 2:
               currentCount = extractToTwoByteArray.toInt(bytes);
-              bytes = [];
               if (currentCount < 0) {
                 flag = 1;
                 continue outer;
               }
-              if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
+              if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency)) && i === buffer.length - 2) {
                 const currentCountBuf = extractToTwoByteArray.fromInt(currentCount);
                 const beforeCount = currentCount - 1n;
                 if (beforeCount < 0) {

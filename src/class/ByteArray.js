@@ -58,7 +58,7 @@ class ByteArray {
     } = this;
     let n = 0n;
     for (let i = 0n; i < buf.length; i += 1n) {
-      n += (BigInt(buf[i]) - shift - 1n) * (size - shift - 1n) ** i;
+      n += (BigInt(buf[i]) - (shift - 1n)) * (size - shift - 1n) ** i;
     }
     return n;
   }

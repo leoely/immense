@@ -6,7 +6,7 @@ import Storage from '~/class/Storage';
 describe('[Class] Storage;', () => {
   test('Storage should be able to complete basic file operations.', async () => {
     const storage = new Storage('/tmp/immense');
-    let ans = await storage.exists('test-file-operation/operation.txt');
+    //let ans = await storage.exists('test-file-operation/operation.txt');
     // expect(ans).toBe(false);
     await storage.addBuffer('test-file-operation/operation.txt', Buffer.from('perform related file operations.'));
     // ans = await storage.exists('test-file-operation/operation.txt');
@@ -28,7 +28,7 @@ describe('[Class] Storage;', () => {
     expect(data.toString()).toMatch('perform related file');
     //await storage.rename('test-file-operation/operation.txt', 'test-file-operation/operation1.txt');
     //data = await storage.readData('test-file-operation/operation1.txt');
-    expect(data.toString()).toMatch('perform related file');
+    //expect(data.toString()).toMatch('perform related file');
     //await storage.rename('test-file-operation/operation1.txt', 'test-file-operation/operation.txt');
     //ans = await storage.exists('test-file-operation/link.txt');
     //expect(ans).toBe(false);
@@ -43,7 +43,7 @@ describe('[Class] Storage;', () => {
     expect(afterNs > beforeNs).toBe(true);
     const watcher = await storage.watch('test-file-operation/operation.txt');
     expect(() => Storage.unwatchSync(watcher)).not.toThrowError();
-    //await storage.remove('test-file-operation/link.txt');
+    await storage.remove('test-file-operation/link.txt');
     //await storage.remove('test-file-operation/operation.txt');
     //expect(childProcess.execSync('ls /tmp/immense').toString()).toMatch('');
     // expect(childProcess.execSync('ls /tmp/immense/.index').toString()).toMatch('');
