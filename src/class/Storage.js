@@ -1225,7 +1225,7 @@ class Storage {
                   continue outer;
                 }
                 beforeCountBuf = extractToTwoByteArray.fromInt(beforeCount);
-                if (currentCountBuf.length === beforeCountBuf.length) {
+                if (currentCountBuf.length === beforeCountBuf.length && i === buffer.length - 2) {
                   currentIdx = i;
                   update = true;
                   break outer;
@@ -1253,6 +1253,7 @@ class Storage {
           bytes.push(byte);
       }
     }
+    // @TODO
     if (update === true) {
       const fd = await openPromise(countsPath, 'a');
       await writePromise(fd, Buffer.from(beforeCountBuf), { position: currentIdx - beforeCountBuf.length, });
