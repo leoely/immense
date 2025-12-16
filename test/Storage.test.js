@@ -44,7 +44,7 @@ describe('[Class] Storage;', () => {
     const watcher = await storage.watch('test-file-operation/operation.txt');
     expect(() => Storage.unwatchSync(watcher)).not.toThrowError();
     await storage.remove('test-file-operation/link.txt');
-    //await storage.remove('test-file-operation/operation.txt');
+    await storage.remove('test-file-operation/operation.txt');
     //expect(childProcess.execSync('ls /tmp/immense').toString()).toMatch('');
     // expect(childProcess.execSync('ls /tmp/immense/.index').toString()).toMatch('');
   });

@@ -336,7 +336,7 @@ function getCountFromCountsHash(countsHash, code, frequency) {
   const innerHash = countsHash[code];
   if (typeof innerHash === 'object') {
     const count = countsHash[code][frequency];
-    if (typeof count === 'number') {
+    if (typeof count === 'bigint') {
       return count;
     } else {
       return 0;
@@ -888,12 +888,12 @@ class Storage {
           case 0:
             switch (flag) {
               case 0:
-              case 1:
                 currentCode = extractToTwoByteArray.toInt(bytes);
                 bytes = [];
                 countsHash[currentCode] = {};
                 flag = 1;
                 break;
+              case 1:
               case 2:
                 flag = 0;
                 break;
@@ -908,7 +908,7 @@ class Storage {
                 break;
               case 2:
                 const count = extractToTwoByteArray.toInt(bytes);
-                if (count !== 0) {
+                if (count !== 0n) {
                   all = false;
                 }
                 bytes = [];
@@ -921,7 +921,7 @@ class Storage {
             bytes.push(byte);
         }
       });
-      if (all === false) {
+      if (all === true) {
         await fsPromises.unlink(countsPath);
       }
     }
@@ -1014,6 +1014,7 @@ class Storage {
     }
   }
 
+  // @TODO
   async removePtrFromPtrs(ptrsPath, code, frequency) {
     const { extractToTwoByteArray, } = this;
     const buffer = await fsPromises.readFile(ptrsPath);
@@ -1253,7 +1254,6 @@ class Storage {
           bytes.push(byte);
       }
     }
-    // @TODO
     if (update === true) {
       const fd = await openPromise(countsPath, 'a');
       await writePromise(fd, Buffer.from(beforeCountBuf), { position: currentIdx - beforeCountBuf.length, });
@@ -1294,14 +1294,14 @@ class Storage {
       await clearEmptyDirs(namesDirPath, '.index');
       await this.reduceCountToCounts(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
       const countsHash = await this.getCountsHash(getCountsPathFromPtrsPath(ptrsPath));
-      if (getCountFromCountsHash(countsHash, code, frequency) === 0) {
+      if (getCountFromCountsHash(countsHash, code, frequency) === 0n) {
         await this.removePtrFromPtrs(ptrsPath, code, frequency);
         await clearEmptyDirs(ptrsDirPath, '.index');
       }
     } else {
       await this.reduceCountToCounts(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
       const countsHash = await this.getCountsHash(getCountsPathFromPtrsPath(ptrsPath));
-      if (getCountFromCountsHash(countsHash, code, frequency) === 0) {
+      if (getCountFromCountsHash(countsHash, code, frequency) === 0n) {
         await this.removePtrFromPtrs(ptrsPath, code, frequency);
         await clearEmptyDirs(ptrsDirPath, '.index');
       }
