@@ -16,14 +16,14 @@
   "devDependencies": {
     "@babel/cli": "^7.20.7",
     "@babel/core": "^7.20.7",
-    "@babel/preset-env": "^7.20.2",
-    "@babel/register": "^7.22.5",
+    "@babel/preset-env": "^7.29.5",
+    "@babel/register": "^7.29.3",
     "babel-plugin-root-import": "^6.6.0",
-    "babel-preset-minify": "^0.4.3",
+    "babel-preset-minify": "^0.5.2",
     "gulp-babel": "^8.0.0",
-    "jest": "^29.6.1"
+    "jest": "^30.4.2"
   },
   "dependencies": {
-    "gulp": "^4.0.2"
+    "gulp": "^5.0.1"
   }
 }
