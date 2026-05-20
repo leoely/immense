@@ -770,9 +770,9 @@ class Storage {
     const { length, } = sortGatherings;
     for (let i = 0; i < length; i += 1) {
       const [code, frequency] = sortGatherings[i];
-      const indexAbsDir = path.join(indexPath, getIndexRelativeDir(code));
+      const indexAbsoluteDir = path.join(indexPath, getIndexRelativeDir(code));
       const depthName = Buffer.from(removeOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const ptrsPath = path.join(indexAbsDir, depthName);
+      const ptrsPath = path.join(indexAbsoluteDir, depthName);
       const result = await this.checkIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
       if (result === false) {
         ans = false;
