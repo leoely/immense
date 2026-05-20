@@ -125,7 +125,7 @@ function getSortGatherings(place) {
   return radixSort(gatherings);
 }
 
-function getIndexRelDirs(code) {
+function getIndexRelativeDir(code) {
   const paths = [];
   while (code > 0) {
     paths.push(String(code % 10));
@@ -302,32 +302,6 @@ async function removeNameFromNames(namesPath, place) {
   }
 }
 
-async function getNamesHash(namesPath) {
-  const buffer = await fsPromises.readFile(namesPath);
-  const nameHash = {};
-  let bytes = [];
-  buffer.forEach((byte) => {
-    switch (byte) {
-      case 0:
-        nameHash[(Buffer.from(bytes).toString())] = true;
-        bytes = [];
-        break;
-      default:
-        bytes.push(byte);
-    }
-  });
-  return nameHash;
-}
-
-async function checkNameFromNames(namesPath, place) {
-  const namesHash = await getNamesHash(namesPath);
-  if (namesHash[place] === true) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
 function getCountsPathFromPtrsPath(ptrsPath) {
   return ptrsPath + '6';
 }
@@ -344,6 +318,28 @@ function getCountFromCountsHash(countsHash, code, frequency) {
   } else {
     return 0;
   }
+}
+
+async function getNameSet(namesPath) {
+  const buffer = await fsPromises.readFile(namesPath);
+  const nameSet = {};
+  let bytes = [];
+  for (let i = 0; i < buffer.length; i += 1) {
+    const byte = buffer[i];
+    if (byte === 0) {
+      const name = Buffer.from(bytes).toString();
+      nameSet[name] = true;
+      bytes = [];
+    } else {
+      bytes.push(byte);
+    }
+  }
+  return nameSet;
+}
+
+async function checkNameInNames(namesPath, place) {
+  const nameSet = await getNameSet(namesPath);
+  return nameSet[place];
 }
 
 class Storage {
@@ -374,8 +370,8 @@ class Storage {
       fs.mkdirSync(indexPath);
     }
     this.indexPath = indexPath;
-    this.extractToOneReasonByteArray = new ByteArray({ size: 202n, shift: 1n, });
-    this.extractToTwoByteArray = new ByteArray({ size: 256n, shift: 2n, });
+    this.removeOneReasonByteArray = new ByteArray({ size: 202n, shift: 1n, });
+    this.removeTwoByteArray = new ByteArray({ size: 256n, shift: 2n, });
   }
 
   dealOptions(options) {
@@ -765,47 +761,110 @@ class Storage {
   }
 
   async exists(place) {
+    let ans = true;
     const {
       indexPath,
-      extractToOneReasonByteArray,
+      removeOneReasonByteArray,
     } = this;
     const sortGatherings = getSortGatherings(place);
     const { length, } = sortGatherings;
     for (let i = 0; i < length; i += 1) {
       const [code, frequency] = sortGatherings[i];
-      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
-      const depthName = Buffer.from(extractToOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const ptrsPath = path.join(indexAbsDirs, depthName);
-      const ans = await this.checkIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
-      if (ans === false) {
-        return false;
+      const indexAbsDir = path.join(indexPath, getIndexRelativeDir(code));
+      const depthName = Buffer.from(removeOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const ptrsPath = path.join(indexAbsDir, depthName);
+      const result = await this.checkIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
+      if (result === false) {
+        ans = false;
+        break;
       }
     }
-    return true;
+    return ans;
+  }
+
+  async checkPointerInPointers(pointersPath, code, frequency) {
+    let ans = false;
+    const pointerHash = await this.getPointerHash(pointersPath);
+    const frequencies = pointerHash[code];
+    if (Array.isArray(frequencies)) {
+      frequency = BigInt(frequency);
+      if (frequencies.includes(frequency)) {
+        ans = true;
+      }
+    }
+    return ans;
+  }
+
+  async checkIndexFile(ptrsPath, code, frequency, name, idx, last) {
+    if (await existsPromise(ptrsPath)) {
+      const ptrsDirPath = path.dirname(ptrsPath);
+      if (idx === last) {
+        const namesDir = path.join(path.dirname(ptrsPath), String(code));
+        const namesPath = path.join(namesDir, String(frequency));
+        const ans = await this.checkPointerInPointers(ptrsPath, code, frequency);
+        if (ans === false) {
+          return ans;
+        }
+        return await checkNameInNames(namesPath, name);
+      } else {
+        return await this.checkPointerInPointers(ptrsPath, code, frequency);
+      }
+    } else {
+      return false;
+    }
+  }
+
+  async getPointerHash(pointersPath) {
+    const pointerHash = {};
+    if (await existsPromise(pointersPath)) {
+      const { removeTwoByteArray, } = this;
+      const buffer = await fsPromises.readFile(pointersPath);
+      let bytes = [];
+      let flag = 0;
+      let code;
+      for (let i = 0; i < buffer.length; i += 1) {
+        const byte = buffer[i];
+        if (byte === 0) {
+          if (flag === 0) {
+            code = removeTwoByteArray.toInt(bytes);
+            if (pointerHash[code] === undefined) {
+              pointerHash[code] = [];
+            }
+            flag = 1;
+          } else {
+            const frequency = removeTwoByteArray.toInt(bytes);
+            pointerHash[code].push(frequency);
+          }
+          bytes = [];
+        } else {
+          bytes.push(byte);
+        }
+      }
+    }
+    return pointerHash;
   }
 
   async addEntireIndex(place) {
     const {
       indexPath,
-      extractToOneReasonByteArray,
+      removeOneReasonByteArray,
     } = this;
     const sortGatherings = getSortGatherings(place);
     const { length, } = sortGatherings;
     for (let i = 0; i < length; i += 1) {
       let [code, frequency] = sortGatherings[i];
-      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
+      const indexAbsDirs = path.join(indexPath, getIndexRelativeDir(code));
       if (!await existsPromise(indexAbsDirs)) {
         await fsPromises.mkdir(indexAbsDirs, { recursive: true, });
       }
-      const depthName = Buffer.from(extractToOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const depthName1 = Buffer.from(extractToOneReasonByteArray.fromInt(0)).map((buffer) => toChar(buffer)).toString();
+      const depthName = Buffer.from(removeOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
       const ptrsPath = path.join(indexAbsDirs, depthName);
       if (!await existsPromise(ptrsPath)) {
         await this.addIndexFile(ptrsPath, code, frequency, place, i, length - 1);
         await this.makeCountFile(getCountsPathFromPtrsPath(ptrsPath), code, frequency);
       } else {
-        const ptrsHash = await this.getPtrsHash(ptrsPath);
-        const frequencies = ptrsHash[code];
+        const pointerHash = await this.getPointerHash(ptrsPath);
+        const frequencies = pointerHash[code];
         if (Array.isArray(frequencies)) {
           frequency = BigInt(frequency);
           if (!frequencies.includes(frequency)) {
@@ -824,57 +883,21 @@ class Storage {
   async removeEntireIndex(place) {
     const {
       indexPath,
-      extractToOneReasonByteArray,
+      removeOneReasonByteArray,
     } = this;
     const sortGatherings = getSortGatherings(place);
     const { length, } = sortGatherings;
     for (let i = length - 1; i >= 0; i -= 1) {
       const [code, frequency] = sortGatherings[i];
-      const indexAbsDirs = path.join(indexPath, getIndexRelDirs(code));
-      const depthName = Buffer.from(extractToOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const ptrsPath = path.join(indexAbsDirs, depthName);
+      const indexAbsoluteDir = path.join(indexPath, getIndexRelativeDir(code));
+      const depthName = Buffer.from(removeOneReasonByteArray.fromInt(i)).map((buffer) => toChar(buffer)).toString();
+      const ptrsPath = path.join(indexAbsoluteDir, depthName);
       await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
     }
   }
 
-  async getPtrsHash(ptrsPath) {
-    if (await existsPromise(ptrsPath)) {
-      const { extractToTwoByteArray, } = this;
-      const buffer = await fsPromises.readFile(ptrsPath);
-      const ptrsHash = {};
-      let bytes = [];
-      let flag = 0;
-      let key;
-      buffer.forEach((byte) => {
-        switch (byte) {
-          case 0:
-            switch (flag) {
-              case 0:
-                key = extractToTwoByteArray.toInt(bytes);
-                if (ptrsHash[key] === undefined) {
-                  ptrsHash[key] = [];
-                }
-                flag = 1;
-                break;
-              case 1:
-                ptrsHash[key].push(extractToTwoByteArray.toInt(bytes));
-                flag = 0;
-                break;
-            }
-            bytes = [];
-            break;
-          default:
-            bytes.push(byte);
-        }
-      });
-      return ptrsHash;
-    } else {
-      return {};
-    }
-  }
-
   async getCountsHash(countsPath) {
-    const { extractToTwoByteArray, } = this;
+    const { removeTwoByteArray, } = this;
     const countsHash = {};
     if (await existsPromise(countsPath)) {
       let all = true;
@@ -888,7 +911,7 @@ class Storage {
           case 0:
             switch (flag) {
               case 0:
-                currentCode = extractToTwoByteArray.toInt(bytes);
+                currentCode = removeTwoByteArray.toInt(bytes);
                 bytes = [];
                 countsHash[currentCode] = {};
                 flag = 1;
@@ -902,12 +925,12 @@ class Storage {
           case 1:
             switch (flag) {
               case 1:
-                currentFrequency = extractToTwoByteArray.toInt(bytes);
+                currentFrequency = removeTwoByteArray.toInt(bytes);
                 bytes = [];
                 flag = 2;
                 break;
               case 2:
-                const count = extractToTwoByteArray.toInt(bytes);
+                const count = removeTwoByteArray.toInt(bytes);
                 if (count !== 0n) {
                   all = false;
                 }
@@ -929,13 +952,14 @@ class Storage {
   }
 
   async addPtrToPtrs(ptrsPath, code, frequency) {
-    const { extractToTwoByteArray, } = this;
+    const { removeTwoByteArray, } = this;
     const ptrsBufArr = [];
     if (await existsPromise(ptrsPath)) {
       const buffer = await fsPromises.readFile(ptrsPath);
       let bytes = [];
       let flag = 0;
       let currentCode;
+      let currentCodeBuf;
       let add;
       for (let i = 0; i < buffer.length; i += 1) {
         const byte = buffer[i];
@@ -943,44 +967,22 @@ class Storage {
           case 0:
             switch (flag) {
               case 0: {
-                currentCode = extractToTwoByteArray.toInt(bytes);
-                ptrsBufArr.push(bytes);
-                ptrsBufArr.push(0);
+                currentCode = removeTwoByteArray.toInt(bytes);
+                currentCodeBuf = bytes;
                 bytes = [];
-                add = false;
                 flag = 1;
                 break;
               }
               case 1:
-                if (currentCode === code) {
-                  if (remove === true && idx === buffer.length - 1) {
-                    await fsPromises.truncate(buffer.length - 2);
-                    const fd = await openPromise(namesPath, 'a');
-                    const appendBuf = [];
-                    appendBuf.push(extractToTwoByteArray.fromInt(frequency));
-                    appendBuf.push(1);
-                    appendBuf.push(0);
-                    await writePromise(fd, appendBuf.flat());
-                    await fsyncPromise(fd);
-                    await closePromise(fd);
-                    return;
-                  }
-                  const frequency = extractToTwoByteArray.fromInt(bytes);
-                  ptrsBufArr.push(bytes);
-                  add = true;
-                }
+                ptrsBufArr.push(currentCodeBuf);
+                ptrsBufArr.push(0);
+                ptrsBufArr.push(bytes);
                 ptrsBufArr.push(0);
                 flag = 0;
                 bytes = [];
                 break;
             }
             break;
-          case 1: {
-            const frequency = extractToTwoByteArray.toInt(bytes);
-            ptrsBufArr.push(bytes);
-            bytes = [];
-            break;
-          }
           default:
             bytes.push(byte);
         }
@@ -990,33 +992,17 @@ class Storage {
       await fsyncPromise(fd);
       await closePromise(fd);
     } else {
-      ptrsBufArr.push(extractToTwoByteArray.fromInt(code));
+      ptrsBufArr.push(removeTwoByteArray.fromInt(code));
       ptrsBufArr.push(0);
-      ptrsBufArr.push(extractToTwoByteArray.fromInt(frequency));
+      ptrsBufArr.push(removeTwoByteArray.fromInt(frequency));
       ptrsBufArr.push(0);
       const fd = await openPromise(ptrsPath, 'w');
       await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
     }
   }
 
-  async checkPtrFromPtrs(ptrsPath, code, frequency) {
-    const ptrsHash = await this.getPtrsHash(ptrsPath);
-    const frequencies = ptrsHash[code];
-    if (Array.isArray(frequencies)) {
-      frequency = BigInt(frequency);
-      if (!frequencies.includes(frequency)) {
-        return false;
-      } else {
-        return true;
-      }
-    } else {
-      return false;
-    }
-  }
-
-  // @TODO
   async removePtrFromPtrs(ptrsPath, code, frequency) {
-    const { extractToTwoByteArray, } = this;
+    const { removeTwoByteArray, } = this;
     const buffer = await fsPromises.readFile(ptrsPath);
     let ptrsBufArr = [];
     let bytes = [];
@@ -1031,7 +1017,7 @@ class Storage {
         case 0: {
           switch (flag) {
             case 0:
-              currentCode = extractToTwoByteArray.toInt(bytes);
+              currentCode = removeTwoByteArray.toInt(bytes);
               currentFrequenciesBuf = [];
               remove = false;
               flag = 1;
@@ -1057,7 +1043,7 @@ class Storage {
           break;
         }
         case 1:
-          const currentFrequency = extractToTwoByteArray.toInt(bytes);
+          const currentFrequency = removeTwoByteArray.toInt(bytes);
           if (!(currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
             if (bytes.length > 0) {
               currentFrequenciesBuf.push(currentCode);
@@ -1098,7 +1084,7 @@ class Storage {
   }
 
   async increaseCountToCounts(countsPath, code, frequency) {
-    const { extractToTwoByteArray, } = this;
+    const { removeTwoByteArray, } = this;
     const buffer = await fsPromises.readFile(countsPath);
     const countsBufArr = [];
     let bytes = [];
@@ -1116,7 +1102,7 @@ class Storage {
           switch (flag) {
             case 1:
             case 0:
-              currentCode = extractToTwoByteArray.toInt(bytes);
+              currentCode = removeTwoByteArray.toInt(bytes);
               countsBufArr.push(bytes);
               bytes = [];
               countsBufArr.push(0);
@@ -1131,31 +1117,31 @@ class Storage {
         case 1:
           switch (flag) {
             case 1:
-              currentFrequency = extractToTwoByteArray.toInt(bytes);
+              currentFrequency = removeTwoByteArray.toInt(bytes);
               bytes = [];
               flag = 2;
               break;
             case 2:
-              currentCount = extractToTwoByteArray.toInt(bytes);
+              currentCount = removeTwoByteArray.toInt(bytes);
               bytes = [];
               if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
-                const currentCountBuf = extractToTwoByteArray.fromInt(currentCount);
+                const currentCountBuf = removeTwoByteArray.fromInt(currentCount);
                 const nextCount = currentCount + 1n;
-                nextCountBuf = extractToTwoByteArray.fromInt(nextCount);
+                nextCountBuf = removeTwoByteArray.fromInt(nextCount);
                 if (currentCountBuf.length === nextCountBuf.length && i === buffer.length - 2) {
                   currentIdx = i;
                   update = true;
                   break outer;
                 } else {
-                  countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
+                  countsBufArr.push(removeTwoByteArray.fromInt(currentFrequency));
                   countsBufArr.push(1);
-                  countsBufArr.push(extractToTwoByteArray.fromInt(nextCount));
+                  countsBufArr.push(removeTwoByteArray.fromInt(nextCount));
                   countsBufArr.push(1);
                 }
               } else {
-                countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
+                countsBufArr.push(removeTwoByteArray.fromInt(currentFrequency));
                 countsBufArr.push(1);
-                countsBufArr.push(extractToTwoByteArray.fromInt(currentCount));
+                countsBufArr.push(removeTwoByteArray.fromInt(currentCount));
                 countsBufArr.push(1);
               }
               flag = 1;
@@ -1178,7 +1164,7 @@ class Storage {
   }
 
   async reduceCountToCounts(countsPath, code, frequency) {
-    const { extractToTwoByteArray, } = this;
+    const { removeTwoByteArray, } = this;
     const buffer = await fsPromises.readFile(countsPath);
     const countsBufArr = [];
     let bytes = [];
@@ -1187,7 +1173,7 @@ class Storage {
     let currentFrequency;
     let currentCount;
     let currentIdx;
-    let beforeCountBuf;
+    let afterCountBuf;
     let update = false;
     outer: for (let i = 0; i < buffer.length; i += 1) {
       const byte = buffer[i];
@@ -1196,7 +1182,7 @@ class Storage {
           switch (flag) {
             case 0:
             case 1:
-              currentCode = extractToTwoByteArray.toInt(bytes);
+              currentCode = removeTwoByteArray.toInt(bytes);
               bytes = [];
               flag = 1;
               break;
@@ -1208,42 +1194,59 @@ class Storage {
         case 1:
           switch (flag) {
             case 1:
-              currentFrequency = extractToTwoByteArray.toInt(bytes);
+              currentFrequency = removeTwoByteArray.toInt(bytes);
               bytes = [];
               flag = 2;
               break;
             case 2:
-              currentCount = extractToTwoByteArray.toInt(bytes);
-              if (currentCount < 0) {
+              currentCount = removeTwoByteArray.toInt(bytes);
+              if (currentCount === 1n) {
+                //if (i === buffer.length - 3) {
+                  //let byteCount = 0;
+                  //let byte;
+                  //let j = i - 1;
+                  //while (true) {
+                    //byte = buffer[j];
+                    //if (byte === 0) {
+                      //break;
+                    //}
+                    //if (byte !== 1) {
+                      //byteCount += 1;
+                    //}
+                  //}
+                  //await fsPromises.truncate(ptrsPath, buffer.length - byteCount - 2);
+                  //const fd = await openPromise(ptrsPath, 'a');
+                  //const appendBuf = Buffer.from([1, 0]);
+                  //await writePromise(fd, appendBuf);
+                  //await fsyncPromise(fd);
+                  //await closePromise(fd);
+                  //return;
+                //}
                 flag = 1;
                 continue outer;
               }
               if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency)) && i === buffer.length - 2) {
-                const currentCountBuf = extractToTwoByteArray.fromInt(currentCount);
-                const beforeCount = currentCount - 1n;
-                if (beforeCount < 0) {
-                  flag = 1;
-                  continue outer;
-                }
-                beforeCountBuf = extractToTwoByteArray.fromInt(beforeCount);
-                if (currentCountBuf.length === beforeCountBuf.length && i === buffer.length - 2) {
+                const currentCountBuf = removeTwoByteArray.fromInt(currentCount);
+                const afterCount = currentCount - 1n;
+                afterCountBuf = removeTwoByteArray.fromInt(afterCount);
+                if (currentCountBuf.length === afterCountBuf.length && i === buffer.length - 2) {
                   currentIdx = i;
                   update = true;
                   break outer;
                 } else {
-                  countsBufArr.push(extractToTwoByteArray.fromInt(currentCode));
+                  countsBufArr.push(removeTwoByteArray.fromInt(currentCode));
                   countsBufArr.push(0);
-                  countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
+                  countsBufArr.push(removeTwoByteArray.fromInt(currentFrequency));
                   countsBufArr.push(1);
-                  countsBufArr.push(extractToTwoByteArray.fromInt(beforeCount));
+                  countsBufArr.push(removeTwoByteArray.fromInt(afterCount));
                   countsBufArr.push(1);
                 }
               } else {
-                countsBufArr.push(extractToTwoByteArray.fromInt(currentCode));
+                countsBufArr.push(removeTwoByteArray.fromInt(currentCode));
                 countsBufArr.push(0);
-                countsBufArr.push(extractToTwoByteArray.fromInt(currentFrequency));
+                countsBufArr.push(removeTwoByteArray.fromInt(currentFrequency));
                 countsBufArr.push(1);
-                countsBufArr.push(extractToTwoByteArray.fromInt(currentCount));
+                countsBufArr.push(removeTwoByteArray.fromInt(currentCount));
                 countsBufArr.push(1);
               }
               flag = 1;
@@ -1256,7 +1259,7 @@ class Storage {
     }
     if (update === true) {
       const fd = await openPromise(countsPath, 'a');
-      await writePromise(fd, Buffer.from(beforeCountBuf), { position: currentIdx - beforeCountBuf.length, });
+      await writePromise(fd, Buffer.from(afterCountBuf), { position: currentIdx - afterCountBuf.length, });
       return;
     }
     if (countsBufArr.length > 0) {
@@ -1270,13 +1273,13 @@ class Storage {
   }
 
   async makeCountFile(countsPath, code, frequency) {
-    const { extractToTwoByteArray, } = this;
+    const { removeTwoByteArray, } = this;
     const countsBufArr = [];
-    countsBufArr.push(extractToTwoByteArray.fromInt(code));
+    countsBufArr.push(removeTwoByteArray.fromInt(code));
     countsBufArr.push(0);
-    countsBufArr.push(extractToTwoByteArray.fromInt(frequency));
+    countsBufArr.push(removeTwoByteArray.fromInt(frequency));
     countsBufArr.push(1);
-    countsBufArr.push(extractToTwoByteArray.fromInt(1));
+    countsBufArr.push(removeTwoByteArray.fromInt(1));
     countsBufArr.push(1);
     countsBufArr.push(0);
     const fd = await openPromise(countsPath, 'w');
@@ -1305,25 +1308,6 @@ class Storage {
         await this.removePtrFromPtrs(ptrsPath, code, frequency);
         await clearEmptyDirs(ptrsDirPath, '.index');
       }
-    }
-  }
-
-  async checkIndexFile(ptrsPath, code, frequency, name, idx, last) {
-    if (await existsPromise(ptrsPath)) {
-      const ptrsDirPath = path.dirname(ptrsPath);
-      if (idx === last) {
-        const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
-        const namesPath = path.join(namesDirPath, String(frequency));
-        const ans = await this.checkPtrFromPtrs(ptrsPath, code, frequency);
-        if (ans === false) {
-          return ans;
-        }
-        return await checkNameFromNames(namesPath, name);
-      } else {
-        return await this.checkPtrFromPtrs(ptrsPath, code, frequency);
-      }
-    } else {
-      return false;
     }
   }
 }
