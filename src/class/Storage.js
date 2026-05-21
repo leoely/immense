@@ -415,7 +415,7 @@ class Storage {
       throw new Error('[Error] The added path does not correspond to the file type.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being read data does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -449,7 +449,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being read buffer piece does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -479,7 +479,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being write buffer piece does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -505,7 +505,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being write buffer does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -558,7 +558,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being append data does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkHiddenDirs(dirname)) {
@@ -595,7 +595,7 @@ class Storage {
     const stats = await fsPromises.lstat(filePath);
     if (!stats.isSymbolicLink()) {
       if (!await existsPromise(filePath)) {
-        throw new Error('[Error] The file being operated on does not exist.');
+        throw new Error('[Error] The file being remove does not exist.');
       }
     }
     await this.removeEntireIndex(place);
@@ -627,7 +627,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being truncate does not exist.');
     }
     await fsPromises.truncate(filePath, length);
   }
@@ -650,7 +650,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(oldFilePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being rename does not exist.');
     }
     if (typeof newPlace !== 'string') {
       throw new Error('[Error] The parameter oldPlace should be of string type.');
@@ -696,7 +696,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(targetFilePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being link does not exist.');
     }
     if (typeof linkPlace !== 'string') {
       throw new Error('[Error] The parameter linkPlace should be of string type.');
@@ -735,7 +735,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being operated on does not exist.');
+      throw new Error('[Error] The file being get stats does not exist.');
     }
     return await fsPromises.stat(filePath, { bigint: true, });
   }
@@ -756,7 +756,7 @@ class Storage {
         throw new Error('[Error] Cannot operate hidden files.');
       }
       if (!await existsPromise(filePath)) {
-        throw new Error('[Error] The file being operated on does not exist.');
+        throw new Error('[Error] The file being watch does not exist.');
       }
       return await watchPromise(filePath, options, listener);
     } else {
