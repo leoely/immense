@@ -1,3 +1,4 @@
+import { constants } from 'node:fs/promises';
 import childProcess from 'child_process';
 import { Buffer, }from 'buffer';
 import { describe, expect, test, } from '@jest/globals';
@@ -7,6 +8,8 @@ describe('[Class] Storage;', () => {
   test('Storage should be able to complete basic file operations.', async () => {
     const storage = new Storage('/tmp/test');
     await storage.addBuffer('test-file-operation/operation.txt', Buffer.from('perform related file operations.'));
+    await storage.mkdir('test-mkdir-operation');
+    await storage.rmdir('test-mkdir-operation');
     let ans = await storage.exists('test-file-operation/operation.txt');
     expect(ans).toBe(true);
     let data = await storage.readData('test-file-operation/operation.txt');
@@ -23,6 +26,7 @@ describe('[Class] Storage;', () => {
     expect(data.toString()).toMatch('perform related file OPERATIONS. etc');
     await storage.truncate('test-file-operation/operation.txt', 21);
     data = await storage.readData('test-file-operation/operation.txt');
+    await expect(storage.access('test-file-operation/operation.txt', constants.R_OK)).resolves.not.toThrow();
     await storage.chmod('test-file-operation/operation.txt', '775');
     await storage.chown('test-file-operation/operation.txt', 502, 0);
     expect(data.toString()).toMatch('perform related file');
@@ -43,6 +47,10 @@ describe('[Class] Storage;', () => {
     expect(afterNs > beforeNs).toBe(true);
     const watcher = await storage.watch('test-file-operation/operation.txt');
     expect(() => Storage.unwatchSync(watcher)).not.toThrow();
+    const files = await storage.readdir('test-file-operation', { recursive: true, });
+    expect(JSON.stringify(files)).toMatch('[\"link.txt\",\"operation.txt\"]');
+    await storage.cpFile('test-file-operation/operation.txt', 'test-file-operation/operation-backup.txt');
+    await storage.remove('test-file-operation/operation-backup.txt');
     await storage.remove('test-file-operation/link.txt');
     await storage.remove('test-file-operation/operation.txt');
     expect(childProcess.execSync('ls /tmp/test').toString()).toMatch('');
