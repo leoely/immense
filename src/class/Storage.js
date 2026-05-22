@@ -738,6 +738,61 @@ class Storage {
     return await fsPromises.stat(filePath, { bigint: true, });
   }
 
+  async chmod(place, mod) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    if (typeof mod !== 'string') {
+      throw new Error('[Error] The parameter mod should be of string type.');
+    }
+    const { location, } = this;
+    const filePath = path.join(location, place);
+    const dirname = dealDirname(path.dirname(filePath));
+    if (!checkHiddenDirs(dirname)) {
+      throw new Error('[Error] Cannot operate hidden directorys.');
+    }
+    const basename = path.basename(filePath);
+    if (!checkHiddenFile(basename)) {
+      throw new Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(filePath).length >= 1)) {
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+    }
+    if (!await existsPromise(filePath)) {
+      throw new Error('[Error] The file being chmod does not exist.');
+    }
+    await fsPromises.chmod(filePath, mod);
+  }
+
+  async chown(place, uid, gid) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    if (!Number.isInteger(uid)) {
+      throw new Error('[Error] The parameter uid should be an integer.');
+    }
+    if (!Number.isInteger(gid)) {
+      throw new Error('[Error] The parameter gid should be an integer.');
+    }
+    const { location, } = this;
+    const filePath = path.join(location, place);
+    const dirname = dealDirname(path.dirname(filePath));
+    if (!checkHiddenDirs(dirname)) {
+      throw new Error('[Error] Cannot operate hidden directorys.');
+    }
+    const basename = path.basename(filePath);
+    if (!checkHiddenFile(basename)) {
+      throw new Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(filePath).length >= 1)) {
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+    }
+    if (!await existsPromise(filePath)) {
+      throw new Error('[Error] The file being chown does not exist.');
+    }
+    await fsPromises.chown(filePath, uid, gid);
+  }
+
   async watch(place, options, listener) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');

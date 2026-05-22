@@ -23,6 +23,8 @@ describe('[Class] Storage;', () => {
     expect(data.toString()).toMatch('perform related file OPERATIONS. etc');
     await storage.truncate('test-file-operation/operation.txt', 21);
     data = await storage.readData('test-file-operation/operation.txt');
+    await storage.chmod('test-file-operation/operation.txt', '775');
+    await storage.chown('test-file-operation/operation.txt', 502, 0);
     expect(data.toString()).toMatch('perform related file');
     await storage.rename('test-file-operation/operation.txt', 'test-file-operation/operation1.txt');
     data = await storage.readData('test-file-operation/operation1.txt');
