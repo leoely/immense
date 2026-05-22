@@ -10,104 +10,6 @@ import openPromise from '~/lib/util/openPromise';
 import closePromise from '~/lib/util/closePromise';
 import watchPromise from '~/lib/util/watchPromise';
 
-function checkHiddenFile(fileName) {
-  let ans = true;
-  if (fileName.charAt(0) === '.') {readFile
-    return false;
-  }
-  return ans;
-}
-
-function checkHiddenDirs(paths) {
-  let ans = true;
-  const dirs = paths.split(path.sep);
-  for (let i = 0; i < dirs.length; i += 1) {
-    const dir = dirs[i];
-    if (dir.charAt(0) === '.') {
-      ans = false;
-      break;
-    }
-  }
-  return ans;
-}
-
-async function clearEmptyDirs(paths, end) {
-  if (await existsPromise(paths)) {
-    const dirs = paths.split(path.sep);
-    while (true) {
-      const site = dirs.join(path.sep);
-      const directory = await fsPromises.opendir(site);
-      const entry = await directory.read();
-      await directory.close();
-      if (typeof end === 'string') {
-        if (end === dirs[dirs.length - 1]) {
-          break;
-        }
-      }
-      if (entry === null) {
-        await fsPromises.rmdir(site);
-        dirs.pop();
-      } else {
-        break;
-      }
-    }
-  }
-}
-
-function dealDirname(dirname) {
-  return dirname.replaceAll('/', path.sep);
-}
-
-function radixSort(list) {
-  if (!Array.isArray(list)) {
-    throw new Error('[Error] The parameter list should be an array type.');
-  }
-  list = list.map((e) => [e[0], e]);
-  const bucket = new Array(10);
-  while (true) {
-    for (let i = 0; i < bucket.length; i += 1) {
-      bucket[i] = undefined;
-    }
-    let flag = 0;
-    list.forEach((e, i) => {
-      const [s] = e;
-      const m = s % 10;
-      if (bucket[m] === undefined) {
-        bucket[m] = [];
-      }
-      bucket[m].unshift(i);
-      const r = parseInt(s / 10);
-      if (r !== 0) {
-        flag += 1;
-      }
-      list[i][0] = r;
-    });
-    if (flag === 0) {
-      break;
-    }
-    const newList = [];
-    for (let i = 0; i < bucket.length; i += 1) {
-      const groove = bucket[9 - i];
-      if (Array.isArray(groove)) {
-        groove.forEach((e) => {
-          newList.unshift(list[e]);
-        });
-      }
-    }
-    list = newList;
-  }
-  const ans = [];
-  for (let i = 0; i < bucket.length; i += 1) {
-    const groove = bucket[9 - i];
-    if (Array.isArray(groove)) {
-      groove.forEach((e) => {
-        ans.unshift(list[e][1]);
-      });
-    }
-  }
-  return ans;
-}
-
 function swapBlank(value) {
   switch (value) {
     case 96:
@@ -228,57 +130,113 @@ function toChar(value) {
   return value;
 }
 
-async function removeNameFromNames(namesPath, place) {
-  const buffer = await fsPromises.readFile(namesPath);
-  const namesBufArr = [];
-  let bytes = [];
-  if (buffer.toString() === place) {
-    await fsPromises.unlink(namesPath);
-  } else {
-    let currentIdx;
-    buffer.forEach((byte, idx) => {
-      switch (byte) {
-        case 0: {
-          const name = Buffer.from(bytes).toString();
-          if (name !== place) {
-            namesBufArr.push(bytes);
-          } else {
-            currentIdx = idx;
-          }
-          bytes = [];
+function getCount(countHash, code, frequency) {
+  let ans = 0n;
+  const hash = countHash[code];
+  if (hash !== undefined) {
+    if (hash[frequency] !== undefined) {
+      ans = hash[frequency];
+    }
+  }
+  return ans;
+}
+
+function radixSort(list) {
+  if (!Array.isArray(list)) {
+    throw new Error('[Error] The parameter list should be an array type.');
+  }
+  list = list.map((e) => [e[0], e]);
+  const bucket = new Array(10);
+  while (true) {
+    for (let i = 0; i < bucket.length; i += 1) {
+      bucket[i] = undefined;
+    }
+    let flag = 0;
+    list.forEach((e, i) => {
+      const [s] = e;
+      const m = s % 10;
+      if (bucket[m] === undefined) {
+        bucket[m] = [];
+      }
+      bucket[m].unshift(i);
+      const r = parseInt(s / 10);
+      if (r !== 0) {
+        flag += 1;
+      }
+      list[i][0] = r;
+    });
+    if (flag === 0) {
+      break;
+    }
+    const newList = [];
+    for (let i = 0; i < bucket.length; i += 1) {
+      const groove = bucket[9 - i];
+      if (Array.isArray(groove)) {
+        groove.forEach((e) => {
+          newList.unshift(list[e]);
+        });
+      }
+    }
+    list = newList;
+  }
+  const ans = [];
+  for (let i = 0; i < bucket.length; i += 1) {
+    const groove = bucket[9 - i];
+    if (Array.isArray(groove)) {
+      groove.forEach((e) => {
+        ans.unshift(list[e][1]);
+      });
+    }
+  }
+  return ans;
+}
+
+function checkHiddenFile(fileName) {
+  let ans = true;
+  if (fileName.charAt(0) === '.') {
+    ans = false;
+  }
+  return ans;
+}
+
+function checkHiddenDirs(paths) {
+  let ans = true;
+  const dirs = paths.split(path.sep);
+  for (let i = 0; i < dirs.length; i += 1) {
+    const dir = dirs[i];
+    if (dir.charAt(0) === '.') {
+      ans = false;
+      break;
+    }
+  }
+  return ans;
+}
+
+async function clearEmptyDirs(paths, end) {
+  if (await existsPromise(paths)) {
+    const dirs = paths.split(path.sep);
+    while (true) {
+      const location = dirs.join(path.sep);
+      const directory = await fsPromises.opendir(location);
+      const entry = await directory.read();
+      await directory.close();
+      if (typeof end === 'string') {
+        if (end === dirs[dirs.length - 1]) {
           break;
         }
-        default:
-          bytes.push(byte);
       }
-    });
-    const { length, } = namesBufArr;
-    if (length === 0) {
-      await fsPromises.unlink(namesPath);
-    } else if (length >= 2 && currentIdx === buffer.length - 1) {
-      const lastNameBufPosition = length - 2;
-      await fsPromises.truncate(buffer.length - namesBufArr[lastNameBufPosition].length - 1);
-    } else {
-      const fd = await openPromise(namesPath, 'w');
-      await writePromise(fd, Buffer.from(namesBufArr.flat()));
-      await fsyncPromise(fd);
-      await closePromise(fd);
+      if (entry === null) {
+        await fsPromises.rmdir(location);
+        dirs.pop();
+      } else {
+        break;
+      }
     }
   }
 }
 
-function getCountFromCountsHash(countsHash, code, frequency) {
-  const innerHash = countsHash[code];
-  if (typeof innerHash === 'object') {
-    const count = countsHash[code][frequency];
-    if (typeof count === 'bigint') {
-      return count;
-    } else {
-      return 0;
-    }
-  } else {
-    return 0;
-  }
+function dealDirname(dirname) {
+  return dirname.replaceAll('/', path.sep);
 }
 
 function getSortGatherings(place) {
@@ -352,6 +310,45 @@ function checkCrossByte(v1, v2, bytes) {
   return length1 === length2;
 }
 
+async function removeName(namesPath, place) {
+  const buffer = await fsPromises.readFile(namesPath);
+  let words = [];
+  let bytes = [];
+  let long;
+  if (buffer.toString() === place) {
+    await fsPromises.unlink(namesPath);
+  } else {
+    let idx;
+    for (let i = 0; i < buffer.length; i += 1) {
+      const byte = buffer[i];
+      if (byte === 0) {
+        const name = Buffer.from(bytes).toString();
+        if (name !== place) {
+          words = words.concat([bytes, 0]);
+        } else {
+          long = bytes.length;
+          idx = i;
+        }
+        bytes = [];
+      } else {
+        bytes.push(byte);
+      }
+    }
+    const { length: size, } = buffer;
+    const { length, } = words;
+    if (length === 0) {
+      await fsPromises.unlink(namesPath);
+    } else if (idx === size - 1) {
+      await fsPromises.truncate(namesPath, buffer.length - long - 1);
+    } else {
+      const fd = await openPromise(namesPath, 'w');
+      await writePromise(fd, Buffer.from(words.flat()));
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    }
+  }
+}
+
 class Storage {
   constructor(location, options = {}) {
     if (typeof location !== 'string') {
@@ -382,6 +379,7 @@ class Storage {
     this.indexPath = indexPath;
     this.shiftOneReasonBytes = new ByteArray({ size: 202n, shift: 1n, });
     this.shiftTwoBytes = new ByteArray({ size: 256n, shift: 2n, });
+    const bytes = new ByteArray({ size: 202n, shift: 0n, });
   }
 
   dealOptions(options) {
@@ -958,13 +956,13 @@ class Storage {
     const assemble = {
       code: -1,
       frequency: -1,
+      count: -1,
     };
     for (let i = 0; i < buffer.length; i += 1) {
       const byte = buffer[i];
       if (byte === 0) {
         if (status === 0) {
           assemble.code = shiftTwoBytes.toInt(bytes);
-          words = words.concat([code, 0]);
           bytes = [];
           status = 1;
         } else if (status === 3) {
@@ -977,23 +975,23 @@ class Storage {
           bytes = [];
           status = 2;
         } else if (status === 2) {
-          assemble.count = shiftTwoBytes.toInt(bytes);
+          const count = shiftTwoBytes.toInt(bytes);
           bytes = [];
           const {
             code: code1,
             frequency: frequency1,
-            count,
           } = assemble;
           if (code1 === code && frequency1 === frequency) {
             if (checkCrossByte(count, count + 1n, shiftTwoBytes)) {
               idx = i;
+              assemble.count = count;
               update = true;
               break;
             } else {
-              words = words.concat([shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+              words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
             }
           } else {
-            words = words.concat([shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
           }
           status = 3;
         }
@@ -1028,262 +1026,226 @@ class Storage {
       const [code, frequency] = sortGatherings[i];
       const indexAbsoluteDir = path.join(indexPath, getIndexRelativeDir(code));
       const depthName = Buffer.from(shiftOneReasonBytes.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const ptrsPath = path.join(indexAbsoluteDir, depthName);
-      await this.removeIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
-    }
-  }
-
-  async getCountsHash(countsPath) {
-    const { shiftTwoBytes, } = this;
-    const countsHash = {};
-    if (await existsPromise(countsPath)) {
-      let all = true;
-      const buffer = await fsPromises.readFile(countsPath);
-      let bytes = [];
-      let flag = 0;
-      let currentCode;
-      let currentFrequency;
-      buffer.forEach((byte) => {
-        switch (byte) {
-          case 0:
-            switch (flag) {
-              case 0:
-                currentCode = shiftTwoBytes.toInt(bytes);
-                bytes = [];
-                countsHash[currentCode] = {};
-                flag = 1;
-                break;
-              case 1:
-              case 2:
-                flag = 0;
-                break;
-            }
-            break;
-          case 1:
-            switch (flag) {
-              case 1:
-                currentFrequency = shiftTwoBytes.toInt(bytes);
-                bytes = [];
-                flag = 2;
-                break;
-              case 2:
-                const count = shiftTwoBytes.toInt(bytes);
-                if (count !== 0n) {
-                  all = false;
-                }
-                bytes = [];
-                countsHash[currentCode][currentFrequency] = count;
-                flag = 1;
-                break;
-            }
-            break;
-          default:
-            bytes.push(byte);
-        }
-      });
-      if (all === true) {
-        await fsPromises.unlink(countsPath);
+      const pointersPath = path.join(indexAbsoluteDir, depthName);
+      if (i === length - 1) {
+        await this.removeIndexFile(pointersPath, code ,frequency, place);
+      } else {
+        await this.removeIndexFile(pointersPath, code ,frequency);
       }
     }
-    return countsHash;
   }
 
-  async removePtrFromPtrs(ptrsPath, code, frequency) {
+  async removeIndexFile(pointersPath, code, frequency, name) {
+    const ptrsDirPath = path.dirname(pointersPath);
+    if (name !== undefined) {
+      const namesDir = path.join(path.dirname(pointersPath), String(code));
+      const namesPath = path.join(namesDir, String(frequency));
+      await removeName(namesPath, name);
+      await clearEmptyDirs(namesDir, '.index');
+      const countsPath = getCountsPath(pointersPath);
+      code = BigInt(code);
+      frequency = BigInt(frequency);
+      await this.reduceCount(countsPath, code, frequency);
+      const countHash = await this.getCountHash(countsPath);
+      if (getCount(countHash, code, frequency) === 0n) {
+        await this.removePointerFromPointers(pointersPath, code, frequency);
+        await clearEmptyDirs(ptrsDirPath, '.index');
+      }
+    } else {
+      const countsPath = getCountsPath(pointersPath);
+      code = BigInt(code);
+      frequency = BigInt(frequency);
+      await this.reduceCount(countsPath, code, frequency);
+      const countHash = await this.getCountHash(countsPath);
+      if (getCount(countHash, code, frequency) === 0n) {
+        await this.removePointerFromPointers(pointersPath, code, frequency);
+        await clearEmptyDirs(ptrsDirPath, '.index');
+      }
+    }
+  }
+
+  async removePointerFromPointers(ptrsPath, code, frequency) {
     const { shiftTwoBytes, } = this;
     const buffer = await fsPromises.readFile(ptrsPath);
-    let ptrsBufArr = [];
+    let words = [];
     let bytes = [];
-    let flag = 0;
-    let currentCode;
-    let currentFrequenciesBuf;
-    let remove;
-    let byteCount;
+    let status = 0;
+    let code1;
+    let reduce = false;
     for (let i = 0; i < buffer.length; i += 1) {
       const byte = buffer[i];
-      switch (byte) {
-        case 0: {
-          switch (flag) {
-            case 0:
-              currentCode = shiftTwoBytes.toInt(bytes);
-              currentFrequenciesBuf = [];
-              remove = false;
-              flag = 1;
-              break;
-            case 1:
-              if (remove === true && i === buffer.length - 1) {
-                await fsPromises.truncate(ptrsPath, buffer.length - byteCount - 2);
-                const fd = await openPromise(ptrsPath, 'a');
-                const appendBuf = Buffer.from([1, 0]);
-                await writePromise(fd, appendBuf);
-                await fsyncPromise(fd);
-                await closePromise(fd);
-                return;
-              }
-              if (currentFrequenciesBuf.length > 0) {
-                ptrsBufArr = ptrsBufArr.concat(currentFrequenciesBuf);
-                ptrsBufArr.push(0);
-              }
-              flag = 0;
-              break;
-          }
+      if (byte === 0) {
+        if (status === 0) {
+          code1 = shiftTwoBytes.toInt(bytes);
           bytes = [];
-          break;
-        }
-        case 1:
-          const currentFrequency = shiftTwoBytes.toInt(bytes);
-          if (!(currentCode === BigInt(code) && currentFrequency === BigInt(frequency))) {
-            if (bytes.length > 0) {
-              currentFrequenciesBuf.push(currentCode);
+          status = 1;
+        } else if (status === 1) {
+          const frequency1 = shiftTwoBytes.toInt(bytes);
+          bytes = [];
+          if (code === code1 && frequency === frequency1) {
+            if (i === buffer.length - 2) {
+              const { length: length1, } = shiftTwoBytes.fromInt(code1);
+              const { length: length2, } = shiftTwoBytes.fromInt(frequency1);
+              const size = buffer.length - 3 - length1 - length2;
+              await fsPromises.truncate(countsPath, size);
+              reduce = true;
             }
           } else {
-            byteCount = bytes.length;
-            remove = true;
+            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 0])
           }
-          break;
-        default:
-          bytes.push(byte);
+          status = 0;
+        }
+      } else {
+        bytes.push(byte);
       }
     }
-    if (ptrsBufArr.length === 0) {
-      await fsPromises.unlink(ptrsPath);
-      const ptrsDirPath = path.dirname(ptrsPath);
-      await clearEmptyDirs(ptrsDirPath, '.index');
-    } else {
-      const fd = await openPromise(ptrsPath, 'w');
-      await writePromise(fd, Buffer.from(ptrsBufArr.flat()));
-      await fsyncPromise(fd);
-      await closePromise(fd);
+    if (reduce === false) {
+      if (words.length === 0) {
+        await fsPromises.unlink(ptrsPath);
+        const ptrsDirPath = path.dirname(ptrsPath);
+        await clearEmptyDirs(ptrsDirPath, '.index');
+      } else {
+        const fd = await openPromise(ptrsPath, 'w');
+        await writePromise(fd, Buffer.from(words.flat()));
+        await fsyncPromise(fd);
+        await closePromise(fd);
+      }
     }
   }
 
-  async reduceCountToCounts(countsPath, code, frequency) {
+  async getCountHash(countsPath) {
+    const countHash = {};
+    if (await existsPromise(countsPath)) {
+      const buffer = await fsPromises.readFile(countsPath);
+      const { shiftTwoBytes, } = this;
+      let bytes = [];
+      let status = 0;
+      const assemble = {
+        frequency: -1,
+        hash: null,
+      };
+      for (let i = 0; i < buffer.length; i += 1) {
+        const byte = buffer[i];
+        if (byte === 0) {
+          if (status === 0) {
+            const code = shiftTwoBytes.toInt(bytes);
+            bytes = [];
+            if (countHash[code] === undefined) {
+              countHash[code] = {};
+            }
+            assemble.hash = countHash[code];
+            status = 1;
+          } else if (status === 3) {
+            status = 0;
+          }
+        } else if (byte === 1) {
+          if (status === 1) {
+            assemble.frequency = shiftTwoBytes.toInt(bytes);
+            bytes = [];
+            status = 2;
+          } else if (status === 2) {
+            const count = shiftTwoBytes.toInt(bytes);
+            bytes = [];
+            const { hash, frequency, } = assemble;
+            hash[frequency] = count;
+            status = 3;
+          }
+        } else {
+          bytes.push(byte);
+        }
+      }
+    }
+    return countHash;
+  }
+
+  async reduceCount(countsPath, code, frequency) {
     const { shiftTwoBytes, } = this;
     const buffer = await fsPromises.readFile(countsPath);
-    const countsBufArr = [];
+    let words = [];
     let bytes = [];
-    let flag = 0;
-    let currentCode;
-    let currentFrequency;
-    let currentCount;
-    let currentIdx;
-    let afterCountBuf;
+    let status = 0;
     let update = false;
-    outer: for (let i = 0; i < buffer.length; i += 1) {
+    let remove = false;
+    let idx;
+    const assemble = {
+      code: -1,
+      frequency: -1,
+      count: -1,
+    };
+    for (let i = 0; i < buffer.length; i += 1) {
       const byte = buffer[i];
-      switch (byte) {
-        case 0:
-          switch (flag) {
-            case 0:
-            case 1:
-              currentCode = shiftTwoBytes.toInt(bytes);
-              bytes = [];
-              flag = 1;
-              break;
-            case 2:
-              flag = 0;
-              break;
-          }
-          break;
-        case 1:
-          switch (flag) {
-            case 1:
-              currentFrequency = shiftTwoBytes.toInt(bytes);
-              bytes = [];
-              flag = 2;
-              break;
-            case 2:
-              currentCount = shiftTwoBytes.toInt(bytes);
-              if (currentCount === 1n) {
-                //if (i === buffer.length - 3) {
-                  //let byteCount = 0;
-                  //let byte;
-                  //let j = i - 1;
-                  //while (true) {
-                    //byte = buffer[j];
-                    //if (byte === 0) {
-                      //break;
-                    //}
-                    //if (byte !== 1) {
-                      //byteCount += 1;
-                    //}
-                  //}
-                  //await fsPromises.truncate(ptrsPath, buffer.length - byteCount - 2);
-                  //const fd = await openPromise(ptrsPath, 'a');
-                  //const appendBuf = Buffer.from([1, 0]);
-                  //await writePromise(fd, appendBuf);
-                  //await fsyncPromise(fd);
-                  //await closePromise(fd);
-                  //return;
-                //}
-                flag = 1;
-                continue outer;
+      if (byte === 0) {
+        if (status === 0) {
+          assemble.code = shiftTwoBytes.toInt(bytes);
+          bytes = [];
+          status = 1;
+        } else if (status === 3) {
+          words.push(0);
+          status = 0;
+        }
+      } else if (byte === 1) {
+        if (status === 1) {
+          assemble.frequency = shiftTwoBytes.toInt(bytes);
+          bytes = [];
+          status = 2
+        } else if (status === 2) {
+          const count = shiftTwoBytes.toInt(bytes);
+          const {
+            code: code1,
+            frequency: frequency1,
+          } = assemble;
+          if (code === code1 && frequency === frequency1) {
+            if (count === 1n) {
+              if (i === buffer.length - 2) {
+                assemble.count = count;
+                idx = i;
+                remove = true;
+                break;
               }
-              if ((currentCode === BigInt(code) && currentFrequency === BigInt(frequency)) && i === buffer.length - 2) {
-                const currentCountBuf = shiftTwoBytes.fromInt(currentCount);
-                const afterCount = currentCount - 1n;
-                afterCountBuf = shiftTwoBytes.fromInt(afterCount);
-                if (currentCountBuf.length === afterCountBuf.length && i === buffer.length - 2) {
-                  currentIdx = i;
-                  update = true;
-                  break outer;
-                } else {
-                  countsBufArr.push(shiftTwoBytes.fromInt(currentCode));
-                  countsBufArr.push(0);
-                  countsBufArr.push(shiftTwoBytes.fromInt(currentFrequency));
-                  countsBufArr.push(1);
-                  countsBufArr.push(shiftTwoBytes.fromInt(afterCount));
-                  countsBufArr.push(1);
-                }
-              } else {
-                countsBufArr.push(shiftTwoBytes.fromInt(currentCode));
-                countsBufArr.push(0);
-                countsBufArr.push(shiftTwoBytes.fromInt(currentFrequency));
-                countsBufArr.push(1);
-                countsBufArr.push(shiftTwoBytes.fromInt(currentCount));
-                countsBufArr.push(1);
-              }
-              flag = 1;
+            }
+            if (checkCrossByte(count, count - 1n, shiftTwoBytes)) {
+              assemble.count = count;
+              idx = i;
+              update = true;
               break;
+            } else {
+              words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+            }
+          } else {
+            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
           }
-          break;
-        default:
-          bytes.push(byte);
+          bytes = [];
+          status = 3;
+        }
+      } else {
+        bytes.push(byte);
       }
     }
-    if (update === true) {
-      const fd = await openPromise(countsPath, 'a');
-      await writePromise(fd, Buffer.from(afterCountBuf), { position: currentIdx - afterCountBuf.length, });
-      return;
-    }
-    if (countsBufArr.length > 0) {
-      const fd = await openPromise(countsPath, 'w');
-      await writePromise(fd, Buffer.from(countsBufArr.flat()));
-      await fsyncPromise(fd);
-      await closePromise(fd);
-    } else {
-      fsPromises.unlink(countsPath);
-    }
-  }
-
-  async removeIndexFile(ptrsPath, code, frequency, name, idx, last) {
-    const ptrsDirPath = path.dirname(ptrsPath);
-    if (idx === last) {
-      const namesDirPath = path.join(path.dirname(ptrsPath), String(code));
-      const namesPath = path.join(namesDirPath, String(frequency));
-      await removeNameFromNames(namesPath, code, frequency, name);
-      await clearEmptyDirs(namesDirPath, '.index');
-      await this.reduceCountToCounts(getCountsPath(ptrsPath), code, frequency);
-      const countsHash = await this.getCountsHash(getCountsPath(ptrsPath));
-      if (getCountFromCountsHash(countsHash, code, frequency) === 0n) {
-        await this.removePtrFromPtrs(ptrsPath, code, frequency);
-        await clearEmptyDirs(ptrsDirPath, '.index');
+    if (remove === true) {
+      const { code, frequency, count, } = assemble
+      const { length: length1, } = shiftTwoBytes.fromInt(code);
+      const { length: length2, } = shiftTwoBytes.fromInt(frequency);
+      const { length: length3, } = shiftTwoBytes.fromInt(count);
+      const size = buffer.length - 4 - length1 - length2 - length3;
+      if (size === 0) {
+        await fsPromises.unlink(countsPath);
+      } else {
+        await fsPromises.truncate(countsPath, size);
       }
     } else {
-      await this.reduceCountToCounts(getCountsPath(ptrsPath), code, frequency);
-      const countsHash = await this.getCountsHash(getCountsPath(ptrsPath));
-      if (getCountFromCountsHash(countsHash, code, frequency) === 0n) {
-        await this.removePtrFromPtrs(ptrsPath, code, frequency);
-        await clearEmptyDirs(ptrsDirPath, '.index');
+      if (update === true) {
+        const fd = await openPromise(countsPath, 'a');
+        const { count, } = assemble;
+        const buffer = Buffer.from(shiftTwoBytes.fromInt(count - 1n));
+        const position = idx - buffer.length;
+        await writePromise(fd, buffer, { position, });
+        await fsyncPromise(fd);
+        await closePromise(fd);
+      } else {
+        const fd = await openPromise(countsPath, 'w');
+        await writePromise(fd, Buffer.from(words.flat()));
+        await fsyncPromise(fd);
+        await closePromise(fd);
       }
     }
   }

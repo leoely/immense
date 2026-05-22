@@ -1,7 +1,7 @@
 class ByteArray {
   constructor(options = {}) {
     const defaultOptions = {
-      size: 255n,
+      size: 256n,
       shift: 0n,
     };
     this.options = Object.assign(defaultOptions, options);
@@ -41,11 +41,11 @@ class ByteArray {
     if (n > (size - 2n - shift)) {
       while (n > size - shift - 1n) {
         const q = n % (size - shift - 1n);
-        ans.push(Number(q + shift - 1n));
+        ans.push(Number(q + shift));
         n = n / size - shift - 1n;
       }
     }
-    ans.push(Number(n + shift - 1n));
+    ans.push(Number(n + shift));
     return ans;
   }
 
@@ -58,7 +58,7 @@ class ByteArray {
     } = this;
     let n = 0n;
     for (let i = 0n; i < buf.length; i += 1n) {
-      n += (BigInt(buf[i]) - (shift - 1n)) * (size - shift - 1n) ** i;
+      n += (BigInt(buf[i]) - (shift)) * (size - shift - 1n) ** i;
     }
     return n;
   }
