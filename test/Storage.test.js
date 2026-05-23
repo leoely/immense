@@ -16,6 +16,8 @@ describe('[Class] Storage;', () => {
     expect(ans).toBe(true);
     await storage.rmdir('test-directory-operation');
     await storage.rmdir('test-directory-operation1');
+    ans = await storage.exists('test-directory-operation1/operation.txt');
+    expect(ans).toBe(false);
     ans = await storage.exists('test-directory-operation/operation.txt');
     expect(ans).toBe(false);
     expect(childProcess.execSync('ls /tmp/test/').toString()).toMatch('');
