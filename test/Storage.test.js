@@ -8,11 +8,17 @@ describe('[Class] Storage;', () => {
   test('Storage should be able to complete basic file operations.', async () => {
     const storage = new Storage('/tmp/test');
     await storage.mkdir('test-directory-operation');
-    await storage.addBuffer('test-dir-operation/operation.txt', Buffer.from('perform related diectory operations'));
-    await storage.rmdir('test-directory-operation');
-    expect(childProcess.execSync('ls /tmp/test/').toString()).toMatch('');
-    let ans = await storage.exists('test-directory-operation/operation.txt');
+    await storage.addBuffer('test-directory-operation/operation.txt', Buffer.from('perform related diectory operations'));
+    let ans = await storage.exists('test-directory-operation1/operation.txt');
     expect(ans).toBe(false);
+    await storage.cp('test-directory-operation', 'test-directory-operation1', { recursive: true, });
+    ans = await storage.exists('test-directory-operation1/operation.txt');
+    expect(ans).toBe(true);
+    await storage.rmdir('test-directory-operation');
+    await storage.rmdir('test-directory-operation1');
+    ans = await storage.exists('test-directory-operation/operation.txt');
+    expect(ans).toBe(false);
+    expect(childProcess.execSync('ls /tmp/test/').toString()).toMatch('');
     await storage.addBuffer('test-file-operation/operation.txt', Buffer.from('perform related file operations.'));
     ans = await storage.exists('test-file-operation/operation.txt');
     expect(ans).toBe(true);
@@ -57,7 +63,9 @@ describe('[Class] Storage;', () => {
     expect(() => Storage.unwatchSync(watcher)).not.toThrow();
     const files = await storage.readdir('test-file-operation', { recursive: true, });
     expect(JSON.stringify(files)).toMatch('[\"link.txt\",\"operation.txt\"]');
-    await storage.cpFile('test-file-operation/operation.txt', 'test-file-operation/operation-backup.txt');
+    const paths = await storage.glob('**/*');
+    expect(JSON.stringify(paths)).toMatch('[\"test-file-operation\",\"test-file-operation/link.txt\",\"test-file-operation/operation.txt\"]')
+    await storage.cp('test-file-operation/operation.txt', 'test-file-operation/operation-backup.txt');
     await storage.remove('test-file-operation/link.txt');
     await storage.remove('test-file-operation/operation.txt');
     await storage.remove('test-file-operation/operation-backup.txt');

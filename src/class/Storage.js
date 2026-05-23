@@ -199,7 +199,7 @@ function checkHiddenFile(fileName) {
   return ans;
 }
 
-function checkHiddenDirs(paths) {
+function checkHiddenDir(paths) {
   let ans = true;
   const dirs = paths.split(path.sep);
   for (let i = 0; i < dirs.length; i += 1) {
@@ -287,7 +287,7 @@ async function getNameSet(namesPath) {
 
 async function checkNameInNames(namesPath, place) {
   const nameSet = await getNameSet(namesPath);
-  return nameSet[place];
+  return nameSet[place] === true;
 }
 
 function getCountsPath(pointersPath) {
@@ -349,6 +349,8 @@ async function removeName(namesPath, place) {
   }
 }
 
+const coverDirectoryIndex = Symbol('coverDirectoryIndex');
+
 class Storage {
   constructor(location, options = {}) {
     if (typeof location !== 'string') {
@@ -357,7 +359,7 @@ class Storage {
     if (!path.isAbsolute(location)) {
       throw new Error('[Error] The location passed in should be an absolute path.');
     }
-    if (!checkHiddenDirs(location)) {
+    if (!checkHiddenDir(location)) {
       throw new Error('[Error] The parameter location cannot contain hidden directories.');
     }
     if (!fs.existsSync(location)) {
@@ -407,6 +409,11 @@ class Storage {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
     }
+    if (options !== undefined) {
+      if (typeof options !== 'object') {
+        throw new Error('[Error] The parameter options should be object type.');
+      }
+    }
     const { location, } = this;
     const filePath = path.join(location, place);
     if (!(path.extname(filePath).length >= 1)) {
@@ -416,7 +423,7 @@ class Storage {
       throw new Error('[Error] The file being read data does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -450,7 +457,7 @@ class Storage {
       throw new Error('[Error] The file being read buffer piece does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -480,7 +487,7 @@ class Storage {
       throw new Error('[Error] The file being write buffer piece does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -506,7 +513,7 @@ class Storage {
       throw new Error('[Error] The file being write buffer does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -529,7 +536,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -559,7 +566,7 @@ class Storage {
       throw new Error('[Error] The file being append data does not exist.');
     }
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -579,7 +586,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -613,7 +620,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -636,7 +643,7 @@ class Storage {
     const { location, } = this;
     const oldFilePath = path.join(location, oldPlace);
     const oldDirname = dealDirname(path.dirname(oldFilePath));
-    if (!checkHiddenDirs(oldDirname)) {
+    if (!checkHiddenDir(oldDirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const oldBasename = path.basename(oldFilePath);
@@ -654,7 +661,7 @@ class Storage {
     }
     const newFilePath = path.join(location, newPlace);
     const newDirname = dealDirname(path.dirname(newFilePath));
-    if (!checkHiddenDirs(newDirname)) {
+    if (!checkHiddenDir(newDirname)) {
       throw Error('[Error] Cannot operate hidden directorys.');
     }
     const newBasename = path.basename(newFilePath);
@@ -675,46 +682,82 @@ class Storage {
     await this.addEntireIndex(newPlace);
   }
 
-  async cpFile(srcPlace, destPlace) {
-    if (typeof srcPlace !== 'string') {
-      throw new Error('[Error] The parameter srcPlace should be of string type.');
+  async cp(srcPath, destPath, options) {
+    if (typeof srcPath !== 'string') {
+      throw new Error('[Error] The parameter srcPath should be of string type.');
+    }
+    if (typeof destPath !== 'string') {
+      throw new Error('[Error] The parameter destPath should be of string type.');
+    }
+    if (options !== undefined) {
+      if (typeof options !== 'object') {
+        throw new Error('[Error] The parameter options should be object type.')
+      }
     }
     const { location, } = this;
-    const srcFilePath = path.join(location, srcPlace);
-    const srcDirname = dealDirname(path.dirname(srcFilePath));
-    if (!checkHiddenDirs(srcDirname)) {
-      throw new Error('[Error] Cannot operate hidden directorys.');
+    const stats = await fsPromises.lstat(path.join(location, srcPath));
+    if (stats.isFile() || stats.isSymbolicLink()) {
+      const srcFilePath = path.join(location, srcPath);
+      const srcDirname = dealDirname(path.dirname(srcFilePath));
+      if (!checkHiddenDir(srcDirname)) {
+        throw new Error('[Error] Cannot operate hidden directorys.');
+      }
+      const srcBasename = path.basename(srcFilePath);
+      if (!checkHiddenFile(srcBasename)) {
+        throw new Error('[Error] Cannot operate hidden files.');
+      }
+      if (!(path.extname(srcFilePath).length >= 1)) {
+        throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+      }
+      if (!await existsPromise(srcFilePath)) {
+        throw new Error('[Error] The file being cp does not exist.');
+      }
+      const destFilePath = path.join(location, destPath);
+      const destDirname = dealDirname(path.dirname(destFilePath));
+      if (!checkHiddenDir(destDirname)) {
+        throw Error('[Error] Cannot operate hidden directorys.');
+      }
+      const destBasename = path.basename(destFilePath);
+      if (!checkHiddenFile(destBasename)) {
+        throw Error('[Error] Cannot operate hidden files.');
+      }
+      if (!(path.extname(destFilePath).length >= 1)) {
+        throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+      }
+      if (await existsPromise(destFilePath)) {
+        throw new Error('[Error] The cp file path cannot exist.');
+      }
+      await fsPromises.cp(srcFilePath, destFilePath, options);
+      await this.addEntireIndex(destPath);
     }
-    const srcBasename = path.basename(srcFilePath);
-    if (!checkHiddenFile(srcBasename)) {
-      throw new Error('[Error] Cannot operate hidden files.');
+    if (stats.isDirectory()) {
+      const srcPosition = path.join(location, srcPath);
+      if (!checkHiddenDir(srcPosition)) {
+        throw new Error('[Error] Cannot operate hidden directorys.');
+      }
+      if (!await existsPromise(srcPosition)) {
+        throw new Error('[Error] The path being cp does not exist.');
+      }
+      const destPosition = path.join(location, destPath);
+      if (!checkHiddenDir(destPosition)) {
+        throw new Error('[Error] Cannot operate hidden directorys.');
+      }
+      await fsPromises.cp(srcPosition, destPosition, options);
+      await this[coverDirectoryIndex](destPath);
     }
-    if (!(path.extname(srcFilePath).length >= 1)) {
-      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+  }
+
+  async [coverDirectoryIndex](directory) {
+    const { location, } = this;
+    const dir = await fsPromises.opendir(path.join(location, directory));
+    for await (const dirent of dir) {
+      if (dirent.isFile() || dirent.isSymbolicLink()) {
+        await this.addEntireIndex(path.join(directory, dirent.name));
+      }
+      if (dirent.isDirectory()) {
+        await this._coverDirectoryIndex(path.join(directory, dirent.name));
+      }
     }
-    if (!await existsPromise(srcFilePath)) {
-      throw new Error('[Error] The file being cp does not exist.');
-    }
-    if (typeof destPlace !== 'string') {
-      throw new Error('[Error] The parameter destPlace should be of string type.');
-    }
-    const destFilePath = path.join(location, destPlace);
-    const destDirname = dealDirname(path.dirname(destFilePath));
-    if (!checkHiddenDirs(destDirname)) {
-      throw Error('[Error] Cannot operate hidden directorys.');
-    }
-    const destBasename = path.basename(destFilePath);
-    if (!checkHiddenFile(destBasename)) {
-      throw Error('[Error] Cannot operate hidden files.');
-    }
-    if (!(path.extname(destFilePath).length >= 1)) {
-      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
-    }
-    if (await existsPromise(destFilePath)) {
-      throw new Error('[Error] The cp file path cannot exist.');
-    }
-    await fsPromises.cp(srcFilePath, destFilePath);
-    await this.addEntireIndex(destPlace);
   }
 
   async link(targetPlace, linkPlace) {
@@ -724,7 +767,7 @@ class Storage {
     const { location, } = this;
     const targetFilePath = path.join(location, targetPlace);
     const targetDirname = dealDirname(path.dirname(targetFilePath));
-    if (!checkHiddenDirs(targetDirname)) {
+    if (!checkHiddenDir(targetDirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const targetBasename = path.basename(targetFilePath);
@@ -742,7 +785,7 @@ class Storage {
     }
     const linkFilePath = path.join(location, linkPlace);
     const linkDirname = dealDirname(path.dirname(linkFilePath));
-    if (!checkHiddenDirs(linkDirname)) {
+    if (!checkHiddenDir(linkDirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const linkBasename = path.basename(linkFilePath);
@@ -763,7 +806,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -789,7 +832,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -818,7 +861,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -844,7 +887,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -855,7 +898,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being chown does not exist.');
+      throw new Error('[Error] The file being access does not exist.');
     }
     await fsPromises.access(filePath, mod);
   }
@@ -867,7 +910,7 @@ class Storage {
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
-    if (!checkHiddenDirs(dirname)) {
+    if (!checkHiddenDir(dirname)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
@@ -878,7 +921,7 @@ class Storage {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being real path does not exist.');
+      throw new Error('[Error] The file being get real path does not exist.');
     }
     const stats = await fsPromises.lstat(filePath, { bigint: true, });
     if (!stats.isSymbolicLink()) {
@@ -891,12 +934,17 @@ class Storage {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
     }
+    if (options !== undefined) {
+      if (typeof options !== 'object') {
+        throw new Error('[Error] The parameter options should be object type.');
+      }
+    }
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
     const basename = path.basename(filePath);
     if (path.extname(filePath).length >= 1) {
-      if (!checkHiddenDirs(dirname)) {
+      if (!checkHiddenDir(dirname)) {
         throw new Error('[Error] Cannot operate hidden directorys.');
       }
       if (!checkHiddenFile(basename)) {
@@ -908,7 +956,7 @@ class Storage {
       return await watchPromise(filePath, options, listener);
     } else {
       const dirPath = filePath;
-      if (!checkHiddenDirs(dirPath)) {
+      if (!checkHiddenDir(dirPath)) {
         throw new Error('[Error] Cannot operate hidden directorys.');
       }
       if (!await existsPromise(filePath)) {
@@ -922,16 +970,18 @@ class Storage {
     if (typeof directory !== 'string') {
       throw new Error('[Error] The parameter directory should be of string type.');
     }
-    if (typeof options !== 'object') {
-      throw new Error('[Error] The parameter options should be object type.');
+    if (options !== undefined) {
+      if (typeof options !== 'object') {
+        throw new Error('[Error] The parameter options should be object type.');
+      }
     }
     const { location, } = this;
     const position = path.join(location, directory);
-    if (!checkHiddenDirs(position)) {
+    if (!checkHiddenDir(position)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     if (!await existsPromise(position)) {
-      throw new Error('[Error] The path being readdir does not exist.');
+      throw new Error('[Error] The path being read dir does not exist.');
     }
     return await fsPromises.readdir(position, options);
   }
@@ -942,7 +992,7 @@ class Storage {
     }
     const { location, } = this;
     const position = path.join(location, directory);
-    if (!checkHiddenDirs(position)) {
+    if (!checkHiddenDir(position)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     await fsPromises.mkdir(position);
@@ -954,11 +1004,11 @@ class Storage {
     }
     const { location, } = this;
     const position = path.join(location, directory);
-    if (!checkHiddenDirs(position)) {
+    if (!checkHiddenDir(position)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
     if (!await existsPromise(position)) {
-      throw new Error('[Error] The path being mkdir does not exist.');
+      throw new Error('[Error] The path being rmdir does not exist.');
     }
     const dir = await fsPromises.opendir(position);
     for await (const dirent of dir) {
@@ -967,10 +1017,49 @@ class Storage {
         await this.rmdir(subDirectory);
       }
       if (dirent.isFile()) {
-        await this.remove(subDirectory);
+        await this.removeEntireIndex(subDirectory);
+        const filePath = path.join(location, subDirectory)
+        await fsPromises.unlink(filePath);
       }
     }
     await fsPromises.rmdir(position);
+  }
+
+  async glob(pattern, options) {
+    if (typeof pattern !== 'string') {
+      throw new Error('[Error] The parameter pattern should be of string type.');
+    }
+    const { location, } = this;
+    if (options !== undefined) {
+      if (typeof options !== 'object') {
+        throw new Error('[Error] The parameter options should be object type.');
+      }
+      options = Object.assign(options, { cwd: location, });
+    }
+    if (options === undefined) {
+      options = { cwd: location, };
+    }
+    const paths = [];
+    for await (const p of fsPromises.glob(pattern, options)) {
+      const position = path.join(location, p);
+      const stats = await fsPromises.lstat(position);
+      if (stats.isFile()) {
+        if (checkHiddenFile(position)) {
+          paths.push(p);
+        }
+      }
+      if (stats.isSymbolicLink()) {
+        if (checkHiddenFile(position)) {
+          paths.push(p);
+        }
+      }
+      if (stats.isDirectory()) {
+        if (checkHiddenDir(position)) {
+          paths.push(p);
+        }
+      }
+    }
+    return paths;
   }
 
   async exists(place) {
@@ -985,8 +1074,13 @@ class Storage {
       const [code, frequency] = sortGatherings[i];
       const indexAbsoluteDir = path.join(indexPath, getIndexRelativeDir(code));
       const depthName = Buffer.from(shiftOneReasonBytes.fromInt(i)).map((buffer) => toChar(buffer)).toString();
-      const ptrsPath = path.join(indexAbsoluteDir, depthName);
-      const result = await this.checkIndexFile(ptrsPath, code ,frequency, place, i, length - 1);
+      const pointersPath = path.join(indexAbsoluteDir, depthName);
+      let result;
+      if (i === length - 1) {
+        result = await this.checkIndexFile(pointersPath, code ,frequency, place);
+      } else {
+        result = await this.checkIndexFile(pointersPath, code ,frequency);
+      }
       if (result === false) {
         ans = false;
         break;
@@ -998,6 +1092,7 @@ class Storage {
   async checkPointerInPointers(pointersPath, code, frequency) {
     let ans = false;
     const pointerHash = await this.getPointerHash(pointersPath);
+    code = BigInt(code);
     const frequencies = pointerHash[code];
     if (Array.isArray(frequencies)) {
       frequency = BigInt(frequency);
@@ -1008,19 +1103,18 @@ class Storage {
     return ans;
   }
 
-  async checkIndexFile(ptrsPath, code, frequency, name, idx, last) {
-    if (await existsPromise(ptrsPath)) {
-      const ptrsDirPath = path.dirname(ptrsPath);
-      if (idx === last) {
-        const namesDir = path.join(path.dirname(ptrsPath), String(code));
-        const namesPath = path.join(namesDir, String(frequency));
-        const ans = await this.checkPointerInPointers(ptrsPath, code, frequency);
+  async checkIndexFile(pointersPath, code, frequency, name) {
+    if (await existsPromise(pointersPath)) {
+      if (name !== undefined) {
+        const ans = await this.checkPointerInPointers(pointersPath, code, frequency);
         if (ans === false) {
-          return ans;
+          return false;
         }
+        const namesDirectory = path.join(path.dirname(pointersPath), String(code));
+        const namesPath = path.join(namesDirectory, String(frequency));
         return await checkNameInNames(namesPath, name);
       } else {
-        return await this.checkPointerInPointers(ptrsPath, code, frequency);
+        return await this.checkPointerInPointers(pointersPath, code, frequency);
       }
     } else {
       return false;
@@ -1275,9 +1369,9 @@ class Storage {
     }
   }
 
-  async removePointerFromPointers(ptrsPath, code, frequency) {
+  async removePointerFromPointers(pointersPath, code, frequency) {
     const { shiftTwoBytes, } = this;
-    const buffer = await fsPromises.readFile(ptrsPath);
+    const buffer = await fsPromises.readFile(pointersPath);
     let words = [];
     let bytes = [];
     let status = 0;
@@ -1312,11 +1406,11 @@ class Storage {
     }
     if (reduce === false) {
       if (words.length === 0) {
-        await fsPromises.unlink(ptrsPath);
-        const ptrsDirPath = path.dirname(ptrsPath);
+        await fsPromises.unlink(pointersPath);
+        const ptrsDirPath = path.dirname(pointersPath);
         await clearEmptyDirs(ptrsDirPath, '.index');
       } else {
-        const fd = await openPromise(ptrsPath, 'w');
+        const fd = await openPromise(pointersPath, 'w');
         await writePromise(fd, Buffer.from(words.flat()));
         await fsyncPromise(fd);
         await closePromise(fd);
