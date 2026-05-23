@@ -574,7 +574,6 @@ class Storage {
 
   async remove(place) {
     if (typeof place !== 'string') {
-  const { length: length1, } = bytes1;
       throw new Error('[Error] The parameter place should be of string type.');
     }
     const { location, } = this;
@@ -861,6 +860,33 @@ class Storage {
     await fsPromises.access(filePath, mod);
   }
 
+  async realpath(place) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    const { location, } = this;
+    const filePath = path.join(location, place);
+    const dirname = dealDirname(path.dirname(filePath));
+    if (!checkHiddenDirs(dirname)) {
+      throw new Error('[Error] Cannot operate hidden directorys.');
+    }
+    const basename = path.basename(filePath);
+    if (!checkHiddenFile(basename)) {
+      throw new Error('[Error] Cannot operate hidden files.');
+    }
+    if (!(path.extname(filePath).length >= 1)) {
+      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+    }
+    if (!await existsPromise(filePath)) {
+      throw new Error('[Error] The file being real path does not exist.');
+    }
+    const stats = await fsPromises.lstat(filePath, { bigint: true, });
+    if (!stats.isSymbolicLink()) {
+      throw new Error('[Error] The realpath operation is not applied to symbolic linkes.');
+    }
+    return await fsPromises.realpath(filePath);
+  }
+
   async watch(place, options, listener) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
@@ -933,6 +959,16 @@ class Storage {
     }
     if (!await existsPromise(position)) {
       throw new Error('[Error] The path being mkdir does not exist.');
+    }
+    const dir = await fsPromises.opendir(position);
+    for await (const dirent of dir) {
+      const subDirectory = path.join(directory, dirent.name);
+      if (dirent.isDirectory()) {
+        await this.rmdir(subDirectory);
+      }
+      if (dirent.isFile()) {
+        await this.remove(subDirectory);
+      }
     }
     await fsPromises.rmdir(position);
   }

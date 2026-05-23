@@ -7,10 +7,14 @@ import Storage from '~/class/Storage';
 describe('[Class] Storage;', () => {
   test('Storage should be able to complete basic file operations.', async () => {
     const storage = new Storage('/tmp/test');
+    await storage.mkdir('test-directory-operation');
+    await storage.addBuffer('test-dir-operation/operation.txt', Buffer.from('perform related diectory operations'));
+    await storage.rmdir('test-directory-operation');
+    expect(childProcess.execSync('ls /tmp/test/').toString()).toMatch('');
+    let ans = await storage.exists('test-directory-operation/operation.txt');
+    expect(ans).toBe(false);
     await storage.addBuffer('test-file-operation/operation.txt', Buffer.from('perform related file operations.'));
-    await storage.mkdir('test-mkdir-operation');
-    await storage.rmdir('test-mkdir-operation');
-    let ans = await storage.exists('test-file-operation/operation.txt');
+    ans = await storage.exists('test-file-operation/operation.txt');
     expect(ans).toBe(true);
     let data = await storage.readData('test-file-operation/operation.txt');
     expect(data.toString()).toMatch('perform related file operations.');
@@ -39,6 +43,8 @@ describe('[Class] Storage;', () => {
     ans = await storage.exists('test-file-operation/link.txt');
     expect(ans).toBe(false);
     await storage.link('test-file-operation/operation.txt', 'test-file-operation/link.txt');
+    const realpath = await storage.realpath('test-file-operation/link.txt');
+    expect(realpath).toMatch('/private/tmp/test/test-file-operation/operation.txt');
     ans = await storage.exists('test-file-operation/link.txt');
     expect(ans).toBe(true);
     data = await storage.writeBuffer('test-file-operation/link.txt', Buffer.from('new content'));
