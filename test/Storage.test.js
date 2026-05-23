@@ -34,6 +34,8 @@ describe('[Class] Storage;', () => {
     data = await storage.readData('test-file-operation/operation1.txt');
     expect(data.toString()).toMatch('perform related file');
     await storage.rename('test-file-operation/operation1.txt', 'test-file-operation/operation.txt');
+    ans = await storage.exists('test-file-operation/operation.txt');
+    expect(ans).toBe(true);
     ans = await storage.exists('test-file-operation/link.txt');
     expect(ans).toBe(false);
     await storage.link('test-file-operation/operation.txt', 'test-file-operation/link.txt');
@@ -50,9 +52,9 @@ describe('[Class] Storage;', () => {
     const files = await storage.readdir('test-file-operation', { recursive: true, });
     expect(JSON.stringify(files)).toMatch('[\"link.txt\",\"operation.txt\"]');
     await storage.cpFile('test-file-operation/operation.txt', 'test-file-operation/operation-backup.txt');
-    await storage.remove('test-file-operation/operation-backup.txt');
     await storage.remove('test-file-operation/link.txt');
     await storage.remove('test-file-operation/operation.txt');
+    await storage.remove('test-file-operation/operation-backup.txt');
     expect(childProcess.execSync('ls /tmp/test').toString()).toMatch('');
     expect(childProcess.execSync('ls /tmp/test/.index').toString()).toMatch('');
   });

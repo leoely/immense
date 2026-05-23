@@ -697,7 +697,7 @@ class Storage {
       throw new Error('[Error] The file being cp does not exist.');
     }
     if (typeof destPlace !== 'string') {
-      throw new Error('[Error] The parameter oldPlace should be of string type.');
+      throw new Error('[Error] The parameter destPlace should be of string type.');
     }
     const destFilePath = path.join(location, destPlace);
     const destDirname = dealDirname(path.dirname(destFilePath));
@@ -1042,8 +1042,6 @@ class Storage {
         } else {
           await this.addIndexFile(pointersPath, code, frequency, place);
         }
-        const pointerPath = getCountsPath(pointersPath);
-        await this.createCountsFile(pointerPath, code, frequency);
       } else {
         const pointerHash = await this.getPointerHash(pointersPath);
         const frequencies = pointerHash[code];
@@ -1067,25 +1065,16 @@ class Storage {
           } else {
             await this.addIndexFile(pointersPath, code, frequency, place);
           }
-          const pointerPath = getCountsPath(pointersPath);
-          await this.createCountFile(pointerPath, code, frequency);
         }
       }
     }
   }
 
-  async createCountsFile(countsPath, code, frequency) {
-    const fd = await openPromise(countsPath, 'w');
-    const { shiftTwoBytes, } = this;
-    const bytes = [shiftTwoBytes.fromInt(code), 0, shiftTwoBytes.fromInt(frequency), 1, shiftTwoBytes.fromInt(1), 1, 0];
-    await writePromise(fd, Buffer.from(bytes));
-    await fsyncPromise(fd);
-    await closePromise(fd);
-  }
-
   async addIndexFile(pointersPath, code, frequency, name) {
     if (name !== undefined) {
       await this.addPointerToPointers(pointersPath, code, frequency);
+      const countsPath = getCountsPath(pointersPath);
+      await this.addCountsToCounts(countsPath, code, frequency);
       const namesDirectory = path.join(path.dirname(pointersPath), String(code));
       if (!await existsPromise(namesDirectory)) {
         await fsPromises.mkdir(namesDirectory);
@@ -1094,6 +1083,24 @@ class Storage {
       await addNameToNames(namesPath, code, frequency, name);
     } else {
       await this.addPointerToPointers(pointersPath, code, frequency);
+      const countsPath = getCountsPath(pointersPath);
+      await this.addCountsToCounts(countsPath, code, frequency);
+    }
+  }
+
+  async addCountsToCounts(countsPath, code, frequency) {
+    const { shiftTwoBytes, } = this;
+    const words = [shiftTwoBytes.fromInt(code), 0, shiftTwoBytes.fromInt(frequency), 1, 3, 1, 0];
+    if (await existsPromise(countsPath)) {
+      const fd = await openPromise(countsPath, 'a');
+      await writePromise(fd, Buffer.from(words.flat()));
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    } else {
+      const fd = await openPromise(countsPath, 'w');
+      await writePromise(fd, Buffer.from(words.flat()));
+      await fsyncPromise(fd);
+      await closePromise(fd);
     }
   }
 
@@ -1369,15 +1376,18 @@ class Storage {
                 idx = i;
                 remove = true;
                 break;
+              } else {
+                words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
               }
-            }
-            if (checkCrossByte(count, count - 1n, shiftTwoBytes)) {
-              assemble.count = count;
-              idx = i;
-              update = true;
-              break;
             } else {
-              words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+              if (checkCrossByte(count, count - 1n, shiftTwoBytes)) {
+                assemble.count = count;
+                idx = i;
+                update = true;
+                break;
+              } else {
+                words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+              }
             }
           } else {
             words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
