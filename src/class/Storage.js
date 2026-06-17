@@ -1,6 +1,7 @@
 import fsPromises from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
+import disk from 'diskusage';
 import ByteArray from '~/class/ByteArray';
 import existsPromise from '~/lib/util/existsPromise';
 import readPromise from '~/lib/util/readPromise';
@@ -349,7 +350,7 @@ async function removeName(namesPath, place) {
   }
 }
 
-const coverDirectoryIndex = Symbol('coverDirectoryIndex');
+const coverDirectoryIndexKey = Symbol('coverDirectoryIndex');
 
 class Storage {
   constructor(location, options = {}) {
@@ -743,11 +744,11 @@ class Storage {
         throw new Error('[Error] Cannot operate hidden directorys.');
       }
       await fsPromises.cp(srcPosition, destPosition, options);
-      await this[coverDirectoryIndex](destPath);
+      await this[coverDirectoryIndexKey](destPath);
     }
   }
 
-  async [coverDirectoryIndex](directory) {
+  async [coverDirectoryIndexKey](directory) {
     const { location, } = this;
     const dir = await fsPromises.opendir(path.join(location, directory));
     for await (const dirent of dir) {
@@ -1060,6 +1061,12 @@ class Storage {
       }
     }
     return paths;
+  }
+
+  async getDiskUsage() {
+    const { location, } = this;
+    const diskUsage = await disk.check(location);
+    return diskUsage;
   }
 
   async exists(place) {

@@ -71,6 +71,8 @@ describe('[Class] Storage;', () => {
     await storage.remove('test-file-operation/link.txt');
     await storage.remove('test-file-operation/operation.txt');
     await storage.remove('test-file-operation/operation-backup.txt');
+    const diskUsage = await storage.getDiskUsage();
+    expect(diskUsage.total).toBe(250790436864);
     expect(childProcess.execSync('ls /tmp/test').toString()).toMatch('');
     expect(childProcess.execSync('ls /tmp/test/.index').toString()).toMatch('');
   });
