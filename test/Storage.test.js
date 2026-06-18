@@ -68,6 +68,8 @@ describe('[Class] Storage;', () => {
     const paths = await storage.glob('**/*');
     expect(JSON.stringify(paths)).toMatch('[\"test-file-operation\",\"test-file-operation/link.txt\",\"test-file-operation/operation.txt\"]')
     await storage.cp('test-file-operation/operation.txt', 'test-file-operation/operation-backup.txt');
+    const diskOccupy = await storage.getDiskOccupy('test-file-operation');
+    expect(diskOccupy).toBe(64);
     await storage.remove('test-file-operation/link.txt');
     await storage.remove('test-file-operation/operation.txt');
     await storage.remove('test-file-operation/operation-backup.txt');

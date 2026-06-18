@@ -683,6 +683,31 @@ class Storage {
     await this.addEntireIndex(newPlace);
   }
 
+  async getDiskOccupy(place) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be of string type.');
+    }
+    const { location, } = this;
+    const specialPath = path.join(location, place);
+    const stats = await fsPromises.lstat(specialPath);
+    if (stats.isFile()) {
+      return stats.size;
+    } else {
+      let size = 0;
+      const nodes = await fsPromises.readdir(specialPath);
+      for (const node of nodes) {
+        const nodePath = path.join(specialPath, node);
+        const stats = await fsPromises.lstat(nodePath);
+        if (stats.isFile()) {
+          size += stats.size;
+        } else if (stats.isDirectory()) {
+          size += await getDiskOccupy(nodePath);
+        }
+      }
+      return size;
+    }
+  }
+
   async cp(srcPath, destPath, options) {
     if (typeof srcPath !== 'string') {
       throw new Error('[Error] The parameter srcPath should be of string type.');
