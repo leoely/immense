@@ -2,7 +2,9 @@ import fsPromises from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
 import disk from 'diskusage';
-import ByteArray from '~/class/ByteArray';
+import {
+  ByteArray,
+} from 'manner.js/server';
 import existsPromise from '~/lib/util/existsPromise';
 import readPromise from '~/lib/util/readPromise';
 import writePromise from '~/lib/util/writePromise';
@@ -1092,6 +1094,11 @@ class Storage {
     const { location, } = this;
     const diskUsage = await disk.check(location);
     return diskUsage;
+  }
+
+  async getAvailable() {
+    const diskUsage = await this.getDiskUsage();
+    return diskUsgae.availble;
   }
 
   async exists(place) {

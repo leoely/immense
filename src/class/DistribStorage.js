@@ -1,11 +1,13 @@
 import net from 'net';
 import {
+  ByteArray,
   getGTMNowString,
   getOwnIpAddresses,
-  nonZeroByteArray,
   appendToLog,
 } from 'manner.js/server';
 import Storage from '~/class/Storage';
+
+const nonZeroByteArray = new ByteArray({ size: 256n, shift: 1n, });
 
 function getBinBuf(params) {
   if (!Array.isArray(params)) {
@@ -18,6 +20,16 @@ function getBinBuf(params) {
   const pbytes = [];
   params.forEach((param) => {
     switch (typeof param) {
+      case 'boolean':
+        switch (param) {
+          case true:
+            pbytes.push(Array.from(nonZeroByteArray.fromInt(1)));
+            break;
+          case false:
+            pbytes.push(Array.from(nonZeroByteArray.fromInt(0)));
+            break;
+        }
+        break;
       case 'string':
         pbytes.push(Array.from(Buffer.from(param)));
         break;
@@ -35,68 +47,69 @@ function getBinBuf(params) {
 }
 
 class DistribStorage extends Storage {
-  constructor(options, port, allRouters) {
+  constructor(options, port, allStorage) {
     super(options);
-    this.dealParams(port, allRouters);
+    this.dealParams(port, allStorages);
+    this.requestCalls = {};
     this.outputDistribTopology();
     this.checkMemory();
   }
 
-  static async combine(distribRouters) {
-    if (!Array.isArray(distribRouters)) {
-      throw new Error('[Error] The parameter distribRouters should be of array type.');
+  static async combine(distribStorages) {
+    if (!Array.isArray(distribStorages)) {
+      throw new Error('[Error] The parameter distribStorages should be of array type.');
     }
-    const serverPromises = distribRouters.map((distribRouter) => {
-      return distribRouter.setUpServer();
+    const serverPromises = distribStorages.map((distribStorage) => {
+      return distribStorage.setUpServer();
     });
-    const clientsPromises = distribRouters.map((distribRouter) => {
-      return distribRouter.setUpClients();
+    const clientsPromises = distribStorages.map((distribStorage) => {
+      return distribStorage.setUpClients();
     });
     await Promise.all(serverPromises.concat(clientsPromises));
   }
 
-  static async join(newDistribRouters, originDistribRouters) {
-    if (!Array.isArray(newDistribRouters)) {
+  static async join(newDistribStorages, originDistribStorages) {
+    if (!Array.isArray(newDistribStorages)) {
       throw new Error('[Error] The new distributed routings should beo fo array type..');
     }
-    if (!Array.isArray(originDistribRouters)) {
+    if (!Array.isArray(originDistribStorages)) {
       throw new Error('[Error] The origin distributed routings should be of array type.');
     }
-    const serverPromises = newDistribRouters.map((distribRouter) => {
-      return distribRouter.setUpServer();
+    const serverPromises = newDistribStorages.map((distribStorage) => {
+      return distribStorage.setUpServer();
     });
-    const clientsPromises = newDistribRouters.map((distribRouter) => {
-      return distribRouter.setUpClients();
+    const clientsPromises = newDistribStorages.map((distribStorage) => {
+      return distribStorage.setUpClients();
     });
-    const addPromises = originDistribRouters.map((originDistribRouter) => {
-      return newDistribRouters.map((newDistribRouter) => {
-        const { ip, port, } = newDistribRouter;
-        originDistribRouter.addRouter(ip, port);
+    const addPromises = originDistribStorages.map((originDistribStorage) => {
+      return newDistribStorages.map((newDistribStorage) => {
+        const { ip, port, } = newDistribStorage;
+        originDistribStorage.addStorage(ip, port);
       });
     }).flat();
     await Promise.all(serverPromises.concat(clientsPromises).concat(addPromises));
   }
 
-  static async release(distribRouters) {
-    if (!Array.isArray(distribRouters)) {
-      throw new Error('[Error] The parameter distribRouters should be of array type.');
+  static async release(distribStorages) {
+    if (!Array.isArray(distribStorages)) {
+      throw new Error('[Error] The parameter distribStorages should be of array type.');
     }
-    distribRouters.forEach((distribRouter) => {
-      distribRouter.closeClients();
-      delete distribRouter.clients;
+    distribStorages.forEach((distribStorage) => {
+      distribStorage.closeClients();
+      delete distribStorage.clients;
     });
-    for (let i = 0; i < distribRouters.length; i += 1) {
-      const distribRouter = distribRouters[i];
-      await distribRouter.closeServer();
-      delete distribRouter.server;
+    for (let i = 0; i < distribStorages.length; i += 1) {
+      const distribStorage = distribStorages[i];
+      await distribStorage.closeServer();
+      delete distribStorage.server;
     }
-    distribRouters.forEach((distribRouter) => {
-      distribRouter.closeConnections();
-      delete distribRouter.connections;
+    distribStorages.forEach((distribStorage) => {
+      distribStorage.closeConnections();
+      delete distribStorage.connections;
     });
   }
 
-  getAckPromises(callback) {
+  getResponsePromises(callback) {
     if (typeof callback !== 'function') {
       throw new Error('[Error] Parameter callback should be a funciton type.');
     }
@@ -104,27 +117,66 @@ class DistribStorage extends Storage {
       callback(client);
       return new Promise((resolve, reject) => {
         client.on('data', (buf) => {
-          const data = buf.toString();
-          switch (data) {
-            case 'ack':
-              resolve();
+          const segments = [];
+          let s = 0;
+          for (let i = 0; i < buf.length; i += 1) {
+            if (buf[i] === 0) {
+              segments.push(buf.slice(s, i));
+              s = i + 1;
+            }
+          }
+          const bigInt1 = nonZeroByteArray.toInt(segments.shift());
+          const code = Number(bigInt1);
+          let params;
+          switch (code) {
+            case 0:
+              params = segments.map((segment, index) => {
+                switch (index) {
+                  case 0: {
+                    const bigInt2 = nonZeroByteArray.toInt(segment);
+                    switch (bigInt2) {
+                      case 1n:
+                        return true;
+                      case 0n:
+                        return false;
+                    }
+                    break;
+                  }
+                  case 2:
+                    return nonZeroByteArray.toInt(segment);
+                  default:
+                    return segment.toString();
+                }
+              });
+              break;
+            case 1:
+              params = segments.map((segment, index) => {
+                switch (index) {
+                  case 0:
+                  case 2:
+                    return nonZeroByteArray.toInt(segment);
+                  default:
+                    return segment.toString();
+                }
+              });
               break;
           }
+          resolve(params);
         });
       });
     });
   }
 
-  dealParams(port, allRouters) {
+  dealParams(port, allStorages) {
     if (Number.isInteger(port) !== true) {
       throw new Error('[Error] The parameter port should be of integer type.');
     }
     if (!(port >= 0)) {
       throw new Error('[Error] Parameter id needs to be a postive integer.');
     }
-    this.port = port
-    if (Array.isArray(allRouters) !== true) {
-      throw new Error('[Error] The parameter all routers should be array type.');
+    this.port = port;
+    if (Array.isArray(allStorages) !== true) {
+      throw new Error('[Error] The parameter all storages should be array type.');
     }
     const ipAddresses = getOwnIpAddresses();
     const locations = [];
@@ -134,18 +186,18 @@ class DistribStorage extends Storage {
       locations.push('[' + ipv6 + ']:' + port);
     });
     const hash = {};
-    const routers = allRouters.filter((router) => {
-      const [_, port] = router;
+    const storages = allStorages.filter((storage) => {
+      const [_, port] = storage;
       if (hash[port] === undefined) {
         hash[port] = true;
       } else {
-        throw new Error('[Error] A port can only be bound to one router');
+        throw new Error('[Error] A port can only be bound to one storage');
       }
       let flag = true;
       for (let i = 0; i< locations.length ; i += 1) {
         const location = locations[i];
-        if (router.join(':') === location) {
-          const [ip] = router;
+        if (storage.join(':') === location) {
+          const [ip] = storage;
           this.ip = ip;
           flag = false;
           break;
@@ -153,7 +205,7 @@ class DistribStorage extends Storage {
       }
       return flag;
     });
-    this.routers = routers;
+    this.storages = storages;
   }
 
   outputDistribTopology() {
@@ -165,27 +217,27 @@ class DistribStorage extends Storage {
       fulmination,
     } = this;
     if (logLevel !== 0) {
-      const routers = this.getRouters()
-      if (routers.length > 0) {
-        const routerTopologys = '[' + routers.join(', ') + ']';
+      const storages = this.getStorages()
+      if (storages.length > 0) {
+        const storageTopologys = '[' + storages.join(', ') + ']';
         const { ip, port, } = this;
         this.appendToLog(
-          ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port + ' ████ & ████ TOPOLOGY:' + routerTopologys + ' ████ ||\n',
+          ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port + ' ████ & ████ TOPOLOGY:' + storageTopologys + ' ████ ||\n',
         );
       }
     }
     if (debug === true) {
-      const routers = this.getRouters();
-      if (Array.isArray(routers) && routers.length > 0) {
-        const routerFulminations = routers.map((router) => {
-          return '(+) bold; dim: "b' + router + '" (+): * | (+): *';
+      const storages = this.getStorages();
+      if (Array.isArray(storages) && storages.length > 0) {
+        const storageFulminations = storages.map((storage) => {
+          return '(+) bold; dim: "b' + storage + '" (+): * | (+): *';
         }).join(' ').concat(' &');
         fulmination.scanAll([
           [`
-            (+) blue; bold: * "&"& (+) bold: * DistribRouter (+) bold; dim: * show distributed topology. &
+            (+) blue; bold: * "&"& (+) bold: * DistribStorage (+) bold; dim: * show distributed topology. &
             (+) blue; bold: ** └─ (+) : * | (+) : *
             `, 0],
-          [routerFulminations, 0],
+          [storageFulminations, 0],
         ]);
         console.log(getGTMNowString() + '\n');
       }
@@ -284,12 +336,12 @@ class DistribStorage extends Storage {
     throw error;
   }
 
-  getRouters() {
-    const { routers, } = this;
-    if (!Array.isArray(routers)) {
-      throw new Error('[Error] The status of routers in distributed routing.');
+  getStorages() {
+    const { storages, } = this;
+    if (!Array.isArray(storages)) {
+      throw new Error('[Error] The status of storages in distributed routing.');
     }
-    return routers;
+    return storages;
   }
 
   async closeServer() {
@@ -361,7 +413,7 @@ class DistribStorage extends Storage {
   async setUpServer() {
     try {
       const {
-        routers: {
+        storages: {
           length,
         },
       } = this;
@@ -369,13 +421,16 @@ class DistribStorage extends Storage {
       this.connections = [];
       this.server = await new Promise((resolve, reject) => {
         const server = net.createServer((connection) => {
-          connection.on('data', (buf) => {
-            this.dealConnectionBuf(buf, connection);
-          });
           count += 1;
-          this.connections.push(connection);
           if (count === length) {
             resolve(server);
+          } else if (count < length) {
+            connection.on('data', (buf) => {
+              this.dealConnectionBuf(buf, connection);
+            });
+            this.connections.push(connection);
+          } else {
+            this.addRequest(connection);
           }
         });
         const { port, } = this;
@@ -393,11 +448,35 @@ class DistribStorage extends Storage {
     }
   }
 
+  dealRequestDataBuffer(ip, port, buf) {
+  }
+
+  dealRequestEndBuffer(ip, port ,buf, connection) {
+  }
+
+  addRequest(connection) {
+    connection.on('data', (buf) => {
+      const { remoteAddress, remotePort, } = connection;
+      this.dealRequestDataBuffer(remoteAddress, remotePort, buf);
+    });
+    connection.on('end', (buf) => {
+      const { remoteAddress, remotePort, } = connection;
+      this.dealRequestEndBuffer(remoteAddress, remotePort, buf, connection);
+    });
+    connection.on('close', () => {
+      this.requests.filter((request) => connection !== request);
+    });
+    connection.on('error', () => {
+      this.requests.filter((request) => connection !== request);
+    });
+    this.requests.push(connection);
+  }
+
   async setUpClients() {
     try {
-      const { routers, } = this;
-      const clientPromises = routers.map((router) => {
-        const [ip, port] = router;
+      const { storages, } = this;
+      const clientPromises = storages.map((storage) => {
+        const [ip, port] = storage;
         return new Promise((resolve, reject) => {
           const client = net.createConnection(port, ip, () => {
             client.ip = ip;
@@ -406,7 +485,7 @@ class DistribStorage extends Storage {
           });
           client.on('close', () => {
             const { ip, port, } = client;
-            this.removeRouter(ip, port);
+            this.removeStorage(ip, port);
           });
         });
       });
@@ -431,143 +510,28 @@ class DistribStorage extends Storage {
     }
     const bigInt1 = nonZeroByteArray.toInt(segments.shift());
     const code = Number(bigInt1);
-    let params;
-    switch (code) {
-      case 0:
-      case 4:
-      case 5:
-        params = segments.map((segment, index) => {
-          switch (index) {
-            case 0:
-              return nonZeroByteArray.toInt(segment);
-            default:
-              return segment.toString();
-          }
-        });
-        break;
-      case 1:
-      case 2:
-      case 3:
-        params = segments.map((segment, index) => {
-          return segment.toString();
-        });
-        break;
-    }
     switch (code) {
       case 0: {
-        const [bigInt2, ...rests] = params;
-        const type = Number(bigInt2);
-        switch (type) {
-          case 0: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.attach(location, JSON.parse(content));
-            connection.write('ack');
-            break;
-          }
-          case 1: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.attach(location, new Function(content));
-            connection.write('ack');
-            break;
-          }
-          default:
-            throw new Error('[Error] Type values should be in the range [0, 1].');
-        }
+        const exists = await this.exists();
+        connection.write(getBinBuf([0, exists, ip, port]));
         break;
       }
       case 1: {
-        if (params.length !== 2) {
-          throw new Error('[Error] The parameter lengths do not match convertion.');
-        }
-        const [location1, location2] = params;
-        this.exchange(location1, location2);
-        connection.write('ack');
-        break;
-      }
-      case 2: {
-        if (params.length !== 1) {
-          throw new Error('[Error] The parameters lengths do not match convertion.');
-        }
-        const [location] = params;
-        this.ruin(location);
-        connection.write('ack');
-        break;
-      }
-      case 3:
-        this.ruinAll(params);
-        connection.write('ack');
-        break;
-      case 4: {
-        const [bigInt2, ...rests] = params;
-        const type = Number(bigInt2);
-        switch (type) {
-          case 0: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.replace(location, JSON.parse(content));
-            connection.write('ack');
-            break;
-          }
-          case 1: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.replace(location, new Function(content));
-            connection.write('ack');
-            break;
-          }
-          default:
-            throw new Error('[Error] Type values should be in the range [0, 1].');
-        }
-        break;
-      }
-      case 5: {
-        const [bigInt2, ...rests] = params;
-        const type = Number(bigInt2);
-        switch (type) {
-          case 0: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.revise(location, JSON.parse(content));
-            connection.write('ack');
-            break;
-          }
-          case 1: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.revise(location, new Function(content));
-            connection.write('ack');
-            break;
-          }
-          default:
-            throw new Error('[Error] Type values should be in the range [0, 1].');
-        }
+        const available = await this.getAvailable();
+        connection.write(getBinBuf([1, available, ip, port]));
         break;
       }
       default:
-        throw new Error('[Error] The code value should be in the range [0, 5]');
+        throw new Error('[Error] The code value should be in the range [0, 1]');
     }
   }
 
-  removeRouter(ip, port) {
-    const { routers, } = this;
-    for (let i = 0; i < routers.length; i += 1) {
-      const [routerIp, routerPort] = routers[i];
-      if (routerIp === ip && routerPort === port) {
-        routers.splice(i, 1);
+  removeStorage(ip, port) {
+    const { storages, } = this;
+    for (let i = 0; i < storages.length; i += 1) {
+      const [storageIp, storagePort] = storages[i];
+      if (storageIp === ip && storagePort === port) {
+        storages.splice(i, 1);
         const { clients, } = this;
         if (Array.isArray(clients)) {
           clients.splice(i, 1);
@@ -579,7 +543,7 @@ class DistribStorage extends Storage {
     this.outputDistribTopology();
   }
 
-  async addRouter(ip, port) {
+  async addStorage(ip, port) {
     return new Promise((resolve, reject) => {
       const client = net.createConnection(port, ip, () => {
         client.ip = ip;
@@ -588,10 +552,10 @@ class DistribStorage extends Storage {
       });
       client.on('close', () => {
         const { ip, port, } = client;
-        this.removeRouter(ip, port);
+        this.removeStorage(ip, port);
       });
-      const { routers, clients, } = this;
-      routers.push([ip, port]);
+      const { storages, clients, } = this;
+      storages.push([ip, port]);
       clients.push(client);
     });
     this.checkMemory();
@@ -605,54 +569,39 @@ class DistribStorage extends Storage {
     }
   }
 
-  async existsDistrib(location, content) {
+  async existsDistrib(place) {
     try {
       this.checkCombine();
-      this.attach(location, content);
-      switch (typeof content) {
-        case 'function': {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([0, 1, location, content.toString()]));
-          });
-          await Promise.all(ackPromises);
-          break;
-        }
-        default: {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([0, 0, location, JSON.stringify(content)]));
-          });
-          await Promise.all(ackPromises);
-        }
-      }
-      this.outputDistribOperate('attachDistrib', location);
+      const exists = await this.exists(place);
+      const responsePromises = this.getResponsePromises((client) => {
+        client.write(getBinBuf([0]));
+      });
+      const existMessages = await Promise.all(responsePromises);
+      return existMessages;
+      this.outputDistribOperate('existDistrib', location);
     } catch (error) {
-      this.outputDistribOperateError('attachDistrib', [locaiton]);
+      this.outputDistribOperateError('existDistrib', [locaiton]);
     }
   }
 
-  async getDiskUsageDistrib(location, content) {
+  async getAvailableDistrib(place) {
     try {
       this.checkCombine();
-      this.attach(location, content);
-      switch (typeof content) {
-        case 'function': {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([0, 1, location, content.toString()]));
-          });
-          await Promise.all(ackPromises);
-          break;
-        }
-        default: {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([0, 0, location, JSON.stringify(content)]));
-          });
-          await Promise.all(ackPromises);
-        }
-      }
-      this.outputDistribOperate('attachDistrib', location);
+      const available = await this.getAvailable(place);
+      const responsePromises = this.getResponsePromises((client) => {
+        client.write(getBinBuf([1]));
+      });
+      const availableMessages = await Promise.all(repsonsePromises);
+      return availableMessages;
+      this.outputDistribOperate('getAvailableDistrib', location);
     } catch (error) {
-      this.outputDistribOperateError('attachDistrib', [locaiton]);
+      this.outputDistribOperateError('getAvailableDistrib', [locaiton]);
     }
+  }
+
+  async readData(place, options) {
+    const existsObjects = await existsDistrib(place);
+    const existsObjects = existsObjects.filter(([exists, ip, port]) => exist === true);
   }
 }
 
