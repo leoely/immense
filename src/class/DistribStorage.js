@@ -51,7 +51,6 @@ class DistribStorage extends Storage {
     super(options);
     this.dealParams(port, allStorages);
     this.status = 0;
-    this.method = '';
     this.params = [];
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.outputDistribTopology();
@@ -460,8 +459,20 @@ class DistribStorage extends Storage {
         this.status = 1;
         break;
       case 1:
-        this.params = JSON.stringify(buf.toString());
+        this.type = byteArray.toInt(buf);
+        this.status = 2;
         break;
+      case 2: {
+        const { type, } = this;
+        switch (type) {
+          case 0:
+            break;
+          case 1:
+            break;
+        }
+        this.status = 1;
+        break;
+      }
     }
   }
 
@@ -474,19 +485,38 @@ class DistribStorage extends Storage {
       const { method, params, } = this;
       if (method !== '') {
         switch (method) {
-          case 'readData':
-          case 'readBufferPiece':
-          case 'stats':
-          case 'diskOccupy':
-          case 'access':
           case 'realpath': {
-            const return = await this[method](...params);
-            const string = JSON.stringify(return);
+            const string = await this[method](...params);
             connection.send(Buffer.from(string));
             break;
           }
+          case 'readData':
+          case 'readBufferPiece': {
+            const buffer = await this[method](...params);
+            connection.send(buffer);
+            break;
+          }
+          case 'stats': {
+            const stats = await this[method](...params);
+            const jsonString = JSON.string(stats);
+            connection.send(Buffer.from(jsonString));
+            break;
+          }
+          case 'diskOccupy': {
+            const int = await this[method](...params);
+            connection.send(byteArray.fromInt(int));
+            break;
+          }
+          case 'access':
+            try {
+              await this[method](...params);
+              connection.send(byteArray.fromInt(1));
+            } catch (error) {
+              connection.send(byteArray.fromInt(0));
+            }
+            break;
           default:
-            await await this[method](...params);
+            await this[method](...params);
         }
       }
       this.status = 0;
