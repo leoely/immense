@@ -393,6 +393,15 @@
   dependencies:
     "@babel/helper-plugin-utils" "^8.0.1"
 
+"@babel/plugin-proposal-decorators@^8.0.2":
+  version "8.0.2"
+  resolved "https://registry.yarnpkg.com/@babel/plugin-proposal-decorators/-/plugin-proposal-decorators-8.0.2.tgz#6adfcc236c53a77d9bab33813b8799b2c55a04e5"
+  integrity sha512-+C6O6KKXU7BBq1GNaIkFJxrALUVGRcr+WeWm4OcuRl3h+l/CmNfcTLMrT2Lm3uvGBimBH/8pEBRrXJFLoO67Gg==
+  dependencies:
+    "@babel/helper-create-class-features-plugin" "^8.0.1"
+    "@babel/helper-plugin-utils" "^8.0.1"
+    "@babel/plugin-syntax-decorators" "^8.0.1"
+
 "@babel/plugin-syntax-async-generators@^7.8.4":
   version "7.8.4"
   resolved "https://registry.yarnpkg.com/@babel/plugin-syntax-async-generators/-/plugin-syntax-async-generators-7.8.4.tgz#a983fb1aeb2ec3f6ed042a210f640e90e786fe0d"
@@ -420,6 +429,13 @@
   integrity sha512-b+YyPmr6ldyNnM6sqYeMWE+bgJcJpO6yS4QD7ymxgH34GBPNDM/THBh8iunyvKIZztiwLH4CJZ0RxTk9emgpjw==
   dependencies:
     "@babel/helper-plugin-utils" "^7.14.5"
+
+"@babel/plugin-syntax-decorators@^8.0.1":
+  version "8.0.1"
+  resolved "https://registry.yarnpkg.com/@babel/plugin-syntax-decorators/-/plugin-syntax-decorators-8.0.1.tgz#e32484d8b60b7b1fdf588ecde6e8e605d355ae52"
+  integrity sha512-NI+0S/6MvR6GlcQFwjDZ+WIc2qvG6TXN534lYs9llNldwW4b7Dh6KTtk030FA0xWdYGs4t1lWo+OEWN8wGB+Nw==
+  dependencies:
+    "@babel/helper-plugin-utils" "^8.0.1"
 
 "@babel/plugin-syntax-import-attributes@^7.24.7":
   version "7.29.7"

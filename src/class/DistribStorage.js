@@ -50,6 +50,10 @@ class DistribStorage extends Storage {
   constructor(options, port, allStorage) {
     super(options);
     this.dealParams(port, allStorages);
+    this.status = 0;
+    this.method = '';
+    this.params = [];
+    this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.outputDistribTopology();
     this.checkMemory();
   }
@@ -448,20 +452,47 @@ class DistribStorage extends Storage {
     }
   }
 
-  dealRequestDataBuffer(ip, port, buf) {
-  }
-
-  dealRequestEndBuffer(ip, port ,buf, connection) {
+  dealRequestDataBuffer(buf) {
+    const { status, byteArray, } = this;
+    switch (status) {
+      case 0:
+        this.method = buf.toString();
+        this.status = 1;
+        break;
+      case 1:
+        this.params = JSON.stringify(buf.toString());
+        break;
+    }
   }
 
   addRequest(connection) {
     connection.on('data', (buf) => {
-      const { remoteAddress, remotePort, } = connection;
-      this.dealRequestDataBuffer(remoteAddress, remotePort, buf);
+      this.dealRequestDataBuffer(buf);
     });
-    connection.on('end', (buf) => {
-      const { remoteAddress, remotePort, } = connection;
-      this.dealRequestEndBuffer(remoteAddress, remotePort, buf, connection);
+    connection.on('end', async (buf) => {
+      this.dealRequestDataBuffer(buf);
+      const { method, params, } = this;
+      if (method !== '') {
+        switch (method) {
+          case 'readData':
+          case 'readBufferPiece':
+          case 'stats':
+          case 'diskOccupy':
+          case 'access':
+          case 'realpath': {
+            const return = await this[method](...params);
+            const string = JSON.stringify(return);
+            connection.send(Buffer.from(string));
+            break;
+          }
+          default:
+            await await this[method](...params);
+        }
+      }
+      this.status = 0;
+      this.params = [];
+      this.method = '';
+      connection.destorySoon();
     });
     connection.on('close', () => {
       this.requests.filter((request) => connection !== request);
@@ -671,7 +702,7 @@ class DistribStorage extends Storage {
       case 'access':
       case 'chown':
       case 'chmod':
-      case 'getStats':
+      case 'stats':
       case 'writeBuffer':
       case 'writeBufferPiece':
       case 'readBufferPiece':
