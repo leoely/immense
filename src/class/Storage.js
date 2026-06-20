@@ -305,7 +305,7 @@ async function addNameToNames(namesPath, code, frequency, name) {
   await closePromise(fd);
 }
 
-function checkCrossByte(v1, v2, bytes) {
+function checkTransitByte(v1, v2, bytes) {
   const bytes1 = bytes.fromInt(v1);
   const bytes2 = bytes.fromInt(v2);
   const { length: length1, } = bytes1;
@@ -685,7 +685,7 @@ class Storage {
     await this.addEntireIndex(newPlace);
   }
 
-  async getDiskOccupy(place) {
+  async diskOccupy(place) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be of string type.');
     }
@@ -1090,13 +1090,25 @@ class Storage {
     return paths;
   }
 
-  async getDiskUsage() {
+  async presence(directory) {
+    if (typeof directory !== 'string') {
+      throw new Error('[Error] The parameter directory should be of string type.');
+    }
+    const { location, } = this;
+    const position = path.join(location, directory);
+    if (!checkHiddenDir(position)) {
+      throw new Error('[Error] Cannot operate hidden directorys.');
+    }
+    return await existsPromise(directory);
+  }
+
+  async diskUsage() {
     const { location, } = this;
     const diskUsage = await disk.check(location);
     return diskUsage;
   }
 
-  async getAvailable() {
+  async available() {
     const diskUsage = await this.getDiskUsage();
     return diskUsgae.availble;
   }
@@ -1326,7 +1338,7 @@ class Storage {
             frequency: frequency1,
           } = assemble;
           if (code1 === code && frequency1 === frequency) {
-            if (checkCrossByte(count, count + 1n, shiftTwoBytes)) {
+            if (checkTransitByte(count, count + 1n, shiftTwoBytes)) {
               idx = i;
               assemble.count = count;
               update = true;
@@ -1549,7 +1561,7 @@ class Storage {
                 words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
               }
             } else {
-              if (checkCrossByte(count, count - 1n, shiftTwoBytes)) {
+              if (checkTransitByte(count, count - 1n, shiftTwoBytes)) {
                 assemble.count = count;
                 idx = i;
                 update = true;

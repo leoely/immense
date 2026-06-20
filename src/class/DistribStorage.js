@@ -50,7 +50,6 @@ class DistribStorage extends Storage {
   constructor(options, port, allStorage) {
     super(options);
     this.dealParams(port, allStorages);
-    this.requestCalls = {};
     this.outputDistribTopology();
     this.checkMemory();
   }
@@ -129,6 +128,7 @@ class DistribStorage extends Storage {
           const code = Number(bigInt1);
           let params;
           switch (code) {
+            case 1:
             case 0:
               params = segments.map((segment, index) => {
                 switch (index) {
@@ -568,7 +568,6 @@ class DistribStorage extends Storage {
       throw new Error('[Error] Distributed node integration is not yet complete.');
     }
   }
-
   async existsDistrib(place) {
     try {
       this.checkCombine();
@@ -584,10 +583,10 @@ class DistribStorage extends Storage {
     }
   }
 
-  async getAvailableDistrib(place) {
+  async availableDistrib(place) {
     try {
       this.checkCombine();
-      const available = await this.getAvailable(place);
+      const available = await this.available(place);
       const responsePromises = this.getResponsePromises((client) => {
         client.write(getBinBuf([1]));
       });
@@ -599,9 +598,141 @@ class DistribStorage extends Storage {
     }
   }
 
-  async readData(place, options) {
-    const existsObjects = await existsDistrib(place);
-    const existsObjects = existsObjects.filter(([exists, ip, port]) => exist === true);
+  async presenceDistrib(place) {
+    try {
+      this.checkCombine();
+      const presence = await this.presence(place);
+      const responsePromises = this.getResponsePromises((client) => {
+        client.write(getBinBuf([2]));
+      });
+      const existMessages = await Promise.all(responsePromises);
+      return existMessages;
+      this.outputDistribOperate('presenceDistrib', location);
+    } catch (error) {
+      this.outputDistribOperateError('presenceDistrib', [locaiton]);
+    }
+  }
+
+  async checkDontExistsDistrib(place) {
+    const existsResults = await existsDistrib(place);
+    return existsResults.every(([exists, ip, port]) => exists === false);
+  }
+
+  async checkDontPresenceDistrib(place) {
+    const presenceResults = await presencejDistrib(place);
+    return presenceResults.every(([exists, ip, port]) => presence === false);
+  }
+
+  async treatExistsDistrib(place) {
+    const existsResults = await existsDistrib(place);
+    const existsResults = existsResults.filter(([exists, ip, port]) => exist === true);
+    if (existsResults.length === 0) {
+      throw new Error('[Error] The file to be operated on does not exist.');
+    } else if (existsResults.length === 1) {
+      const [existsResult] = existsResults;
+      const [_, ip, port] = existsResult;
+      return [ip, port];
+    } else {
+      throw new Error('[Error] Multiple files exist please chk system data is correct.')
+    }
+  }
+
+  async treatPresenceDistrib(place) {
+    const presenceResults = await presenceDistrib(place);
+    const presenceResults = presenceResults.filter(([presence, ip, port]) => presence === true);
+    if (presenceResults.length === 0) {
+      throw new Error('[Error] The directory to be operated on does not exist.');
+    } else if (presenceResults.length === 1) {
+      const [presenceResult] = presenceResults;
+      const [_, ip, port] = presenceResult;
+      return [ip, port];
+    } else {
+      throw new Error('[Error] Multiple files directory please chk system data is correct.')
+    }
+  }
+
+  async treatAvailableDistrib(place, options) {
+    const availableResults = await avaiableDistrib();
+    let max = -Infinity;
+    const site = [];
+    availableResults.forEach(([available, ip, port]) => {
+      if (available > max) {
+        site[0] = ip;
+        site[1] = port;
+      }
+    });
+    return ans;
+  }
+
+  async treatSiteDistrib(method, params) {
+    const sites;
+    switch (method) {
+      case 'realpath':
+      case 'access':
+      case 'chown':
+      case 'chmod':
+      case 'getStats':
+      case 'writeBuffer':
+      case 'writeBufferPiece':
+      case 'readBufferPiece':
+      case 'appendData':
+      case 'remove':
+      case 'truncate':
+      case 'diskOccupy':
+      case 'readData': {
+        const [place] = params;
+        site = await treatExistsDistrib(place);
+        sites.push(site);
+        break;
+      }
+      case 'addBuffer': {
+        const [place] = params;
+        site = await treatAvaibleDistrib(place);
+        sites.push(site);
+        break;
+      }
+      case 'link':
+      case 'rename': {
+        const [place1, place2] = params;
+        site = await treatAvaibleDistrib(place);
+        sites.push(site);
+        const dontExist = await treatDontExistsDistrib(place2);
+        if (dontExist !== true) {
+          throw new Error('[Error] The path currently being operated on already exists.');
+        }
+        break;
+      }
+      case 'rmdir':
+      case 'readdir': {
+        const [diectory] = params;
+        site = await treatPresenceDistrib(directory);
+        sites.push(site);
+        break;
+      }
+      case 'mkdir': {
+        const [place] = params;
+        site = await treatPresenceDistrib(directory);
+        sites.push(site);
+        break;
+      }
+      case 'cp': {
+        const [directory1, directory] = params;
+        site = await treatAvaibleDistrib(directory1);
+        sites.push(site);
+        const dontExist = await treatDontPresenceDistrib(directory2);
+        if (dontExist !== true) {
+          throw new Error('[Error] The path currently being operated on already exists.');
+        }
+        break;
+      }
+      case 'glob': {
+        const { storages, } = this;
+        storages.forEach(([ip, port] => sites.push[ip, port]));
+        const { ip, port, } = this;
+        sites.push([ip, port]);
+        break;
+      }
+    }
   }
 }
 

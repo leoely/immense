@@ -1,4 +1,4 @@
-class StorageClient {
+class StorageRequest {
   constructor() {
   }
 }
