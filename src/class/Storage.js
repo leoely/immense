@@ -387,7 +387,7 @@ class Storage {
     const bytes = new ByteArray({ size: 202n, shift: 0n, });
   }
 
-  dealOptions(options) {
+  dealOptions() {
     const {
       options: {
         minimumStorageCapacity,

@@ -47,7 +47,7 @@ function getBinBuf(params) {
 }
 
 class DistribStorage extends Storage {
-  constructor(options, port, allStorage) {
+  constructor(options, port, allStorages) {
     super(options);
     this.dealParams(port, allStorages);
     this.status = 0;
@@ -465,10 +465,26 @@ class DistribStorage extends Storage {
       case 2: {
         const { type, } = this;
         switch (type) {
-          case 0:
+          case 0n: {
+            const string = buf.toString();
+            this.params.push(string);
             break;
-          case 1:
+          }
+          case 1n: {
+            const object = JSON.parse(buf.toString());
+            this.params.push(object);
             break;
+          }
+          case 2n: {
+            const int = Number(byteArray.toInt(buf));
+            this.params.push(int);
+            break;
+          }
+          case 3n: {
+            const buffer = buf;
+            this.params.push(buffer);
+            break;
+          }
         }
         this.status = 1;
         break;

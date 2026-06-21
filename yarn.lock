@@ -1661,6 +1661,11 @@
   resolved "https://registry.yarnpkg.com/@unrs/resolver-binding-win32-x64-msvc/-/resolver-binding-win32-x64-msvc-1.12.2.tgz#72da0da48d72b1e87831b9c0308931d3f4669027"
   integrity sha512-nAB74NfSNKknqQ1RrYj6uz8FcXEomu/MATJZxh/x+BArzN2U3JbOYC0APYzUIGhVY3m5hRxA8VPNdPBoG8txlA==
 
+address@^2.0.1:
+  version "2.0.3"
+  resolved "https://registry.yarnpkg.com/address/-/address-2.0.3.tgz#e910900615db3d8a20c040d4c710631062fc4ba8"
+  integrity sha512-XNAb/a6TCqou+TufU8/u11HCu9x1gYvOoxLwtlXgIqmkrYQADVv6ljyW2zwiPhHz9R1gItAWpuDrdJMmrOBFEA==
+
 advising.js@^1.0.36:
   version "1.0.36"
   resolved "https://registry.yarnpkg.com/advising.js/-/advising.js-1.0.36.tgz#f930710c5177233b4d1e1ef11aeac2ce8ac9b1cd"
@@ -2794,6 +2799,13 @@ detect-newline@^3.1.0:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/detect-newline/-/detect-newline-3.1.0.tgz#576f5dfc63ae1a192ff192d8ad3af6308991b651"
   integrity sha512-TLz+x/vEXm/Y7P7wn1EJFNLxYpUD4TgMosxY6fAVJUnJMbupHBOncxyWUG9OpTaH9EBD7uFI5LfEgmMOc54DsA==
+
+detect-port@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/detect-port/-/detect-port-2.1.0.tgz#03d72644891fa451ca5609b83107a8a0ebd03f91"
+  integrity sha512-epZuWb/6Q62L+nDHJc/hQAqf8pylsqgk3BpZXVBx1CDnr3nkrVNn73Uu1rXcFzkNcc+hkP3whuOg7JZYaQB65Q==
+  dependencies:
+    address "^2.0.1"
 
 diskusage@^1.2.0:
   version "1.2.0"
