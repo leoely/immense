@@ -12,6 +12,27 @@ class StorageClient {
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
     this.dealParams(allStorages);
+    this.index = getRandomIndex();
+  }
+
+  getRandomIndex() {
+    const {
+      allStorages: { length, },
+    } = this;
+    return Math.ceil(Math.random() * length);
+  }
+
+  getNextIndex() {
+    const {
+      index,
+      allStorages: { length, },
+    } = this;
+    if (index < length) {
+      this.index += 1;
+    } else {
+      this.index = 0;
+    }
+    return this.index;
   }
 
   dealOptions() {
@@ -53,7 +74,7 @@ class StorageClient {
   }
 
   @ClientMethod
-  async readData() {}
+  async readData(place, options) {}
 }
 
 export default StorageClient;

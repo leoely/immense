@@ -50,6 +50,7 @@ class DistribStorage extends Storage {
   constructor(options, port, allStorages) {
     super(options);
     this.dealParams(port, allStorages);
+    this.count = 0;
     this.switch = 0;
     this.status = 0;
     this.params = [];
@@ -422,20 +423,26 @@ class DistribStorage extends Storage {
           length,
         },
       } = this;
-      let count = 0;
       this.connections = [];
       this.server = await new Promise((resolve, reject) => {
         const server = net.createServer((connection) => {
-          count += 1;
-          if (count === length) {
+          if (count === length - 1) {
+            connection.on('data', (buf) => {
+              this.dealConnectionBuf(buf, connection);
+            });
+            this.connections.push(connection);
             resolve(server);
           } else if (count < length) {
             connection.on('data', (buf) => {
               this.dealConnectionBuf(buf, connection);
             });
             this.connections.push(connection);
-          } else {
+            this.count += 1;
+          } else if (count === length) {
             this.addRequest(connection);
+            this.count += 1;
+          } else {
+            connection.destroySoon();
           }
         });
         const { port, } = this;
@@ -561,6 +568,7 @@ class DistribStorage extends Storage {
         this.method = '';
         this.switch = 0;
         connection.destorySoon();
+        this.count -= 1;
         break;
       }
       case 1: {
