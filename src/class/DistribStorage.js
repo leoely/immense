@@ -50,10 +50,12 @@ class DistribStorage extends Storage {
   constructor(options, port, allStorages) {
     super(options);
     this.dealParams(port, allStorages);
+    this.switch = 0;
     this.status = 0;
     this.params = [];
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.outputDistribTopology();
+    this.dealBuffer = this.dealBuffer.bind(this);
     this.checkMemory();
   }
 
@@ -451,18 +453,14 @@ class DistribStorage extends Storage {
     }
   }
 
-  dealRequestDataBuffer(buf) {
+  dealRequestBuffer(buf) {
     const { status, byteArray, } = this;
     switch (status) {
       case 0:
-        this.method = buf.toString();
+        this.type = byteArray.toInt(buf);
         this.status = 1;
         break;
-      case 1:
-        this.type = byteArray.toInt(buf);
-        this.status = 2;
-        break;
-      case 2: {
+      case 1: {
         const { type, } = this;
         switch (type) {
           case 0n: {
@@ -486,60 +484,99 @@ class DistribStorage extends Storage {
             break;
           }
         }
-        this.status = 1;
+        this.status = 0;
         break;
       }
     }
   }
 
-  addRequest(connection) {
-    connection.on('data', (buf) => {
-      this.dealRequestDataBuffer(buf);
-    });
-    connection.on('end', async (buf) => {
-      this.dealRequestDataBuffer(buf);
-      const { method, params, } = this;
-      if (method !== '') {
-        switch (method) {
-          case 'realpath': {
-            const string = await this[method](...params);
-            connection.send(Buffer.from(string));
-            break;
-          }
-          case 'readData':
-          case 'readBufferPiece': {
-            const buffer = await this[method](...params);
-            connection.send(buffer);
-            break;
-          }
-          case 'stats': {
-            const stats = await this[method](...params);
-            const jsonString = JSON.string(stats);
-            connection.send(Buffer.from(jsonString));
-            break;
-          }
-          case 'diskOccupy': {
-            const int = await this[method](...params);
-            connection.send(byteArray.fromInt(int));
-            break;
-          }
-          case 'access':
-            try {
-              await this[method](...params);
-              connection.send(byteArray.fromInt(1));
-            } catch (error) {
-              connection.send(byteArray.fromInt(0));
-            }
-            break;
-          default:
-            await this[method](...params);
+  async dealDistribBuffer(buf) {
+    this.method = buf.toString();
+    const sites = await this.treatSitesDistrib();
+    return sites;
+  }
+
+  async dealBuffer(buf) {
+    const { length, } = buf;
+    switch (length) {
+      case 7:
+        if (buf.toString() === 'distrib') {
+          this.switch = 1;
         }
+        break;
+      case 3:
+        if (buf.toString() === 'end') {
+          this.switch = 0;
+        }
+        break;
+      case 6:
+        if (buf.toString() === 'single') {
+          this.switch = 2;
+        }
+        break;
+    }
+    const { switch, } = this;
+    switch (switch) {
+      case 0: {
+        this.dealRequestBuffer(buf);
+        const { method, params, } = this;
+        if (method !== '') {
+          switch (method) {
+            case 'realpath': {
+              const string = await this[method](...params);
+              connection.send(Buffer.from(string));
+              break;
+            }
+            case 'readData':
+            case 'readBufferPiece': {
+              const buffer = await this[method](...params);
+              connection.send(buffer);
+              break;
+            }
+            case 'stats': {
+              const stats = await this[method](...params);
+              const jsonString = JSON.string(stats);
+              connection.send(Buffer.from(jsonString));
+              break;
+            }
+            case 'diskOccupy': {
+              const int = await this[method](...params);
+              connection.send(byteArray.fromInt(int));
+              break;
+            }
+            case 'access':
+              try {
+                await this[method](...params);
+                connection.send(byteArray.fromInt(1));
+              } catch (error) {
+                connection.send(byteArray.fromInt(0));
+              }
+              break;
+            default:
+              await this[method](...params);
+          }
+        }
+        this.status = 0;
+        this.params = [];
+        this.method = '';
+        this.switch = 0;
+        connection.destorySoon();
+        break;
       }
-      this.status = 0;
-      this.params = [];
-      this.method = '';
-      connection.destorySoon();
-    });
+      case 1: {
+        const sites = await this.dealDistribBuffer(buf);
+        const string = JSON.stringify(sites);
+        connection.send(Buffer.from(string));
+        break;
+      }
+      case 2:
+        this.dealRequestBuffer(buf);
+        break;
+    }
+  }
+
+  addRequest(connection) {
+    connection.on('data', this.dealBuffer);
     connection.on('close', () => {
       this.requests.filter((request) => connection !== request);
     });
@@ -741,7 +778,7 @@ class DistribStorage extends Storage {
     return ans;
   }
 
-  async treatSiteDistrib(method, params) {
+  async treatSitesDistrib(method, params) {
     const sites;
     switch (method) {
       case 'realpath':

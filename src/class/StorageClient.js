@@ -52,7 +52,7 @@ class StorageClient {
     this.allStorages = allStorages;
   }
 
-  @client
+  @ClientMethod
   async readData() {}
 }
 
