@@ -353,6 +353,8 @@ async function removeName(namesPath, place) {
 }
 
 const coverDirectoryIndexKey = Symbol('coverDirectoryIndex');
+const temporaryDiskAvailableKey = Symbol('temporaryDiskAvailable');
+const temporaryUpdateDiskAvailableKey = Symbol('temporaryUpdateDiskAvailable');
 
 class Storage {
   constructor(location, options = {}) {
@@ -374,6 +376,8 @@ class Storage {
     this.location = location;
     const defaultOptions = {
       minimumStorageCapacity: 5 * 1024 ** 3,
+      acquireAvaiableDelta: false,
+      temporaryDiskAvailable: -1,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
@@ -406,6 +410,38 @@ class Storage {
       throw new Error('[Error] The passed parameter watcher is not of type StatWatcher.');
     }
     watcher.close();
+  }
+
+  async acquireAvaiableDelta(callback) {
+    if (typeof callback !== 'function') {
+      throw new Error('[Error] The parameter callback should be of function type.')
+    }
+    const {
+      options: {
+        acquireAvailableDelta,
+      },
+    } = this;
+    if (acquireAvaiableDelta === true) {
+      this.beforeAvailable = this.getAvailable();
+    }
+    await callback();
+    if (acquireAvaiableDelta === true) {
+      const { beforeAvaiable, } = this;
+      return beforeAvailable - this.getAvailable();
+    } else {
+      return -1;
+    }
+  }
+
+  async [temporaryUpdateDiskAvailableKey](availableDelta) {
+    const {
+      options: {
+        temporaryDiskSwitch,
+      },
+    } = this;
+    if (temporaryDiskSwitch === true) {
+      this[temporaryDiskAvaiable] -= availableDelta;
+    }
   }
 
   async readData(place, options) {
@@ -497,10 +533,13 @@ class Storage {
     if (!checkSingleHidden(basename)) {
       throw new Error('[Error] cannot operate hidden files.');
     }
-    const fd = await openPromise(filePath, 'a');
-    await writePromise(fd, buffer, { position, });
-    await fsyncPromise(fd);
-    await closePromise(fd);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      const fd = await openPromise(filePath, 'a');
+      await writePromise(fd, buffer, { position, });
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async writeBuffer(place, buffer) {
@@ -523,10 +562,13 @@ class Storage {
     if (!checkSingleHidden(basename)) {
       throw new Error('[Error] cannot operate hidden files.');
     }
-    const fd = await openPromise(filePath, 'a');
-    await writePromise(fd, buffer);
-    await fsyncPromise(fd);
-    await closePromise(fd);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      const fd = await openPromise(filePath, 'a');
+      await writePromise(fd, buffer);
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async addBuffer(place, buffer) {
@@ -549,11 +591,14 @@ class Storage {
     if (!await existsPromise(dirname)) {
       await fsPromises.mkdir(dirname, { recursive: true, });
     }
-    await this.addEntireIndex(place);
-    const fd = await openPromise(filePath, 'w');
-    await writePromise(fd, buffer);
-    await fsyncPromise(fd);
-    await closePromise(fd);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await this.addEntireIndex(place);
+      const fd = await openPromise(filePath, 'w');
+      await writePromise(fd, buffer);
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async appendData(place, data) {
@@ -576,10 +621,13 @@ class Storage {
     if (!checkSingleHidden(basename)) {
       throw new Error('[Error] Cannot operate hidden files.');
     }
-    const fd = await openPromise(filePath, 'a');
-    await writePromise(fd, data);
-    await fsyncPromise(fd);
-    await closePromise(fd);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      const fd = await openPromise(filePath, 'a');
+      await writePromise(fd, data);
+      await fsyncPromise(fd);
+      await closePromise(fd);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async remove(place) {
@@ -605,9 +653,12 @@ class Storage {
         throw new Error('[Error] The file being remove does not exist.');
       }
     }
-    await this.removeEntireIndex(place);
-    await fsPromises.unlink(filePath);
-    await clearEmptyDirs(dirname, '.index');
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await this.removeEntireIndex(place);
+      await fsPromises.unlink(filePath);
+      await clearEmptyDirs(dirname, '.index');
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async truncate(place, length) {
@@ -636,7 +687,10 @@ class Storage {
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being truncate does not exist.');
     }
-    await fsPromises.truncate(filePath, length);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await fsPromises.truncate(filePath, length);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async rename(oldPlace, newPlace) {
@@ -677,12 +731,15 @@ class Storage {
     if (await existsPromise(newFilePath)) {
       throw new Error('[Error] The renamed file path cannot exist.');
     }
-    await fsPromises.rename(oldFilePath, newFilePath);
-    if (oldDirname !== newDirname) {
-      await clearEmptyDirs(oldDirname, '.index');
-    }
-    await this.removeEntireIndex(oldPlace);
-    await this.addEntireIndex(newPlace);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await fsPromises.rename(oldFilePath, newFilePath);
+      if (oldDirname !== newDirname) {
+        await clearEmptyDirs(oldDirname, '.index');
+      }
+      await this.removeEntireIndex(oldPlace);
+      await this.addEntireIndex(newPlace);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async diskOccupy(place) {
@@ -1098,6 +1155,26 @@ class Storage {
   async available() {
     const diskUsage = await this.getDiskUsage();
     return diskUsgae.availble;
+  }
+
+  setTemporaryDiskSwitch(temporaryDiskSwitch) {
+    if (typeof temporaryDiskSwitch !== 'boolean') {
+      throw new Error('[Error] Parameter temporaryDiskSwtich should be of boolean type.');
+    }
+    this.options.temporaryDiskSwitch = temporaryDiskSwitch;
+    const {
+      options: {
+        temporaryDiskSwitch,
+        temporaryDiskAvailable,
+      },
+    } = this;
+    if (temporaryDiskSwitch === true) {
+      const {
+        options,
+      } = this;
+      options.acquireAvailableDelta = true;
+      this[temporaryDiskAviableKey] = temporaryDiskAvailable;
+    }
   }
 
   async exists(place) {
