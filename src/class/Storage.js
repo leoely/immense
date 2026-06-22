@@ -699,7 +699,7 @@ class Storage {
       const nodes = await fsPromises.readdir(specialPath);
       for (const node of nodes) {
         const nodePath = path.join(specialPath, node);
-        const stats = await fsPromises.lstat(nodePath);
+        const stats = await fsPromises.lstat(nodePath, { bigint: true, });
         if (stats.isFile()) {
           size += stats.size;
         } else if (stats.isDirectory()) {

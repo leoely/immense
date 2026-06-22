@@ -463,9 +463,13 @@ class DistribStorage extends Storage {
   dealRequestBuffer(buf) {
     const { status, byteArray, } = this;
     switch (status) {
+      case 1:
+        this.method = buf.toString();
+        this.status = 0;
+        break;
       case 0:
         this.type = byteArray.toInt(buf);
-        this.status = 1;
+        this.status = 2;
         break;
       case 1: {
         const { type, } = this;
@@ -486,12 +490,17 @@ class DistribStorage extends Storage {
             break;
           }
           case 3n: {
+            const bigInt = byteArray.toInt(buf);
+            this.params.push(bigInt);
+            break;
+          }
+          case 4n: {
             const buffer = buf;
             this.params.push(buffer);
             break;
           }
         }
-        this.status = 0;
+        this.status = 1;
         break;
       }
     }
@@ -508,23 +517,23 @@ class DistribStorage extends Storage {
     switch (length) {
       case 7:
         if (buf.toString() === 'distrib') {
-          this.switch = 1;
+          this.switch = 2;
         }
         break;
       case 3:
         if (buf.toString() === 'end') {
-          this.switch = 0;
+          this.switch = 1;
         }
         break;
-      case 6:
-        if (buf.toString() === 'single') {
-          this.switch = 2;
+      case 8:
+        if (buf.toString() === 'redirect') {
+          this.switch = 3;
         }
         break;
     }
     const { switch, } = this;
     switch (switch) {
-      case 0: {
+      case 1: {
         this.dealRequestBuffer(buf);
         const { method, params, } = this;
         if (method !== '') {
@@ -540,6 +549,8 @@ class DistribStorage extends Storage {
               connection.send(buffer);
               break;
             }
+            case 'glob':
+            case 'readdir':
             case 'stats': {
               const stats = await this[method](...params);
               const jsonString = JSON.string(stats);
@@ -547,8 +558,8 @@ class DistribStorage extends Storage {
               break;
             }
             case 'diskOccupy': {
-              const int = await this[method](...params);
-              connection.send(byteArray.fromInt(int));
+              const bigInt = await this[method](...params);
+              connection.send(byteArray.fromInt(bigInt));
               break;
             }
             case 'access':
@@ -565,19 +576,22 @@ class DistribStorage extends Storage {
         }
         this.status = 0;
         this.params = [];
+        this.type = '';
         this.method = '';
         this.switch = 0;
         connection.destorySoon();
         this.count -= 1;
         break;
       }
-      case 1: {
+      case 2: {
         const sites = await this.dealDistribBuffer(buf);
         const string = JSON.stringify(sites);
         connection.send(Buffer.from(string));
+        this.method = '';
+        this.switch = 0;
         break;
       }
-      case 2:
+      case 3:
         this.dealRequestBuffer(buf);
         break;
     }

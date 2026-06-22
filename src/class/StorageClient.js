@@ -75,6 +75,9 @@ class StorageClient {
 
   @ClientMethod
   async readData(place, options) {}
+
+  @ClientMethod
+  async readBufferPiece(place, position, length) {}
 }
 
 export default StorageClient;
