@@ -32,7 +32,7 @@ describe('[Class] Storage;', () => {
     data = await storage.readData('test-file-operation/operation.txt');
     expect(data.toString()).toMatch('perform related file OPERATIONS.');
     await storage.appendData('test-file-operation/operation.txt', ' etc');
-    let stats = await storage.getStats('test-file-operation/operation.txt');
+    let stats = await storage.stats('test-file-operation/operation.txt');
     const beforeNs = stats.mtimeNs;
     data = await storage.readData('test-file-operation/operation.txt');
     expect(data.toString()).toMatch('perform related file OPERATIONS. etc');
@@ -58,7 +58,7 @@ describe('[Class] Storage;', () => {
     data = await storage.writeBuffer('test-file-operation/link.txt', Buffer.from('new content'));
     data = await storage.readData('test-file-operation/link.txt');
     expect(data.toString()).toMatch('new content');
-    stats = await storage.getStats('test-file-operation/operation.txt');
+    stats = await storage.stats('test-file-operation/operation.txt');
     const afterNs = stats.mtimeNs;
     expect(afterNs > beforeNs).toBe(true);
     const watcher = await storage.watch('test-file-operation/operation.txt');
@@ -69,7 +69,7 @@ describe('[Class] Storage;', () => {
     expect(JSON.stringify(paths)).toMatch('[\"test-file-operation\",\"test-file-operation/link.txt\",\"test-file-operation/operation.txt\"]')
     await storage.cp('test-file-operation/operation.txt', 'test-file-operation/operation-backup.txt');
     const diskOccupy = await storage.diskOccupy('test-file-operation');
-    expect(diskOccupy).toBe(64);
+    expect(diskOccupy).toBe(64n);
     await storage.remove('test-file-operation/link.txt');
     await storage.remove('test-file-operation/operation.txt');
     await storage.remove('test-file-operation/operation-backup.txt');

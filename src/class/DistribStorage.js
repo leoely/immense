@@ -47,16 +47,15 @@ function getBinBuf(params) {
 }
 
 class DistribStorage extends Storage {
-  constructor(options, port, allStorages) {
-    super(options);
+  constructor(location, options, port, allStorages) {
+    super(location, options);
     this.dealParams(port, allStorages);
     this.count = 0;
-    this.switch = 0;
+    this.state = 0;
     this.status = 0;
     this.params = [];
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.dealBuffer = this.dealBuffer.bind(this);
-    this.checkMemory();
   }
 
   static async combine(distribStorages) {
@@ -292,14 +291,14 @@ class DistribStorage extends Storage {
       this.server = await new Promise((resolve, reject) => {
         const server = net.createServer((connection) => {
           if (count === length - 1) {
-            connection.on('data', (buf) => {
-              this.dealConnectionBuf(buf, connection);
+            connection.on('data', async (buf) => {
+              await this.dealConnectionBuf(buf, connection);
             });
             this.connections.push(connection);
             resolve(server);
           } else if (count < length) {
-            connection.on('data', (buf) => {
-              this.dealConnectionBuf(buf, connection);
+            connection.on('data', async (buf) => {
+              await this.dealConnectionBuf(buf, connection);
             });
             this.connections.push(connection);
             this.count += 1;
@@ -317,7 +316,6 @@ class DistribStorage extends Storage {
         server.listen(port);
       });
       const { server, } = this;
-      this.checkMemory();
       return server;
     } catch (error) {
     }
@@ -380,22 +378,22 @@ class DistribStorage extends Storage {
     switch (length) {
       case 7:
         if (buf.toString() === 'distrib') {
-          this.switch = 2;
+          this.state = 2;
         }
         break;
       case 3:
         if (buf.toString() === 'end') {
-          this.switch = 1;
+          this.state = 1;
         }
         break;
       case 8:
         if (buf.toString() === 'redirect') {
-          this.switch = 3;
+          this.state = 3;
         }
         break;
     }
-    const { switch, } = this;
-    switch (switch) {
+    const { state, } = this;
+    switch (state) {
       case 1: {
         this.dealRequestBuffer(buf);
         const { method, params, } = this;
@@ -441,7 +439,7 @@ class DistribStorage extends Storage {
         this.params = [];
         this.type = '';
         this.method = '';
-        this.switch = 0;
+        this.state = 0;
         connection.destorySoon();
         this.count -= 1;
         break;
@@ -451,7 +449,7 @@ class DistribStorage extends Storage {
         const string = JSON.stringify(sites);
         connection.send(Buffer.from(string));
         this.method = '';
-        this.switch = 0;
+        this.state = 0;
         break;
       }
       case 3:
@@ -490,13 +488,12 @@ class DistribStorage extends Storage {
       });
       this.clients = await Promise.all(clientPromises);
       const { clients, } = this;
-      this.checkMemory();
       return clients;
     } catch (error) {
     }
   }
 
-  dealConnectionBuf(buf, connection) {
+  async dealConnectionBuf(buf, connection) {
     const segments = [];
     let s = 0;
     for (let i = 0; i < buf.length; i += 1) {
@@ -554,7 +551,6 @@ class DistribStorage extends Storage {
       storages.push([ip, port]);
       clients.push(client);
     });
-    this.checkMemory();
   }
 
   checkCombine() {
@@ -613,8 +609,8 @@ class DistribStorage extends Storage {
   }
 
   async treatExistsDistrib(place) {
-    const existsResults = await existsDistrib(place);
-    const existsResults = existsResults.filter(([exists, ip, port]) => exist === true);
+    let existsResults = await existsDistrib(place);
+    existsResults = existsResults.filter(([exists, ip, port]) => exist === true);
     if (existsResults.length === 0) {
       throw new Error('[Error] The file to be operated on does not exist.');
     } else if (existsResults.length === 1) {
@@ -627,8 +623,8 @@ class DistribStorage extends Storage {
   }
 
   async treatPresenceDistrib(place) {
-    const presenceResults = await presenceDistrib(place);
-    const presenceResults = presenceResults.filter(([presence, ip, port]) => presence === true);
+    let presenceResults = await presenceDistrib(place);
+    presenceResults = presenceResults.filter(([presence, ip, port]) => presence === true);
     if (presenceResults.length === 0) {
       throw new Error('[Error] The directory to be operated on does not exist.');
     } else if (presenceResults.length === 1) {
@@ -654,7 +650,7 @@ class DistribStorage extends Storage {
   }
 
   async treatSitesDistrib(method, params) {
-    const sites;
+    const sites = [];
     switch (method) {
       case 'realpath':
       case 'access':

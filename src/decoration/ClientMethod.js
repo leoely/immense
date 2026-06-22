@@ -98,8 +98,13 @@ export default function ClientMethod(value, { kind, name, }) {
     const returns = await Promise.all(promises);
     const { length, } = returns;
     switch (name) {
-      case 'glob':
+      case 'glob': {
+        let paths = [];
+        returns.forEach((r) => {
+          paths = paths.concat(r);
+        });
         break;
+      }
       default:
         return returns[0];
     }
