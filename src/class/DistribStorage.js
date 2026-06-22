@@ -290,13 +290,15 @@ class DistribStorage extends Storage {
       this.connections = [];
       this.server = await new Promise((resolve, reject) => {
         const server = net.createServer((connection) => {
+          const { count, } = this;
           if (count === length - 1) {
             connection.on('data', async (buf) => {
               await this.dealConnectionBuf(buf, connection);
             });
             this.connections.push(connection);
+            this.count += 1;
             resolve(server);
-          } else if (count < length) {
+          } else if (count < length - 1) {
             connection.on('data', async (buf) => {
               await this.dealConnectionBuf(buf, connection);
             });

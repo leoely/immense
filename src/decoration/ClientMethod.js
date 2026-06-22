@@ -18,11 +18,12 @@ export default function ClientMethod(value, { kind, name, }) {
         const sitesBuffer = await dataPromise(client);
         const sites = JSON.stringify(siteBuffer.toString());
         resolve(sites);
+        client.destorySoon();
       });
     });
     const promises = sites.map(([ip, port]) => {
       return new Promise((resolve, reject) => {
-        const client = et.createConnection(port, ip, async () => {
+        const client = net.createConnection(port, ip, async () => {
           client.write('redirect');
           params.forEach((param) => {
             switch (typeof param) {
@@ -45,68 +46,69 @@ export default function ClientMethod(value, { kind, name, }) {
             }
             client.write(param);
           });
-          client.write('end');
+          client.write(Buffer.from('end'));
+          const buffer = await dataPromise(client);
+          switch (method) {
+            case 'realpath': {
+              resolve(buf.toString());
+              break;
+            }
+            case 'readData': {
+              const options = params[1];
+              if (typeof options === 'object') {
+                const { encoding, } = options;
+                if (typeof encoding === 'string' && encoding.length > 0) {
+                  resolve(buffer.toString());
+                }
+              }
+              resolve(buffer);
+              break;
+            }
+            case 'readBufferPiece': {
+              resolve(buffer);
+              break;
+            }
+            case 'glob':
+            case 'readdir':
+            case 'stats': {
+              resolve(JSON.stringify(buf.toString()));
+              break;
+            }
+            case 'diskOccupy': {
+              const bigInt = byteArray.toInt(buf);
+              resolve(bigInt);
+              break;
+            }
+            case 'access': {
+              const int = byteArray.toInt(buf);
+              switch (int) {
+                case 0n:
+                  resolve(false);
+                  break;
+                case 1n:
+                  resolve(true);
+                  break;
+              }
+            }
+            default:
+              resolve();
+          }
+          const returns = await Promise.all(promises);
+          const { length, } = returns;
+          switch (name) {
+            case 'glob': {
+              let paths = [];
+              returns.forEach((r) => {
+                paths = paths.concat(r);
+              });
+              break;
+            }
+            default:
+              return returns[0];
+          }
+          client.destorySoon();
         });
       });
-      const buffer = await dataPromise(client);
-      switch (method) {
-        case 'realpath': {
-          resolve(buf.toString());
-          break;
-        }
-        case 'readData': {
-          const options = params[1];
-          if (typeof options === 'object') {
-            const { encoding, } = options;
-            if (typeof encoding === 'string' && encoding.length > 0) {
-              resolve(buffer.toString());
-            }
-          }
-          resolve(buffer);
-          break;
-        }
-        case 'readBufferPiece': {
-          resolve(buffer);
-          break;
-        }
-        case 'glob':
-        case 'readdir':
-        case 'stats': {
-          resolve(JSON.stringify(buf.toString()));
-          break;
-        }
-        case 'diskOccupy': {
-          const bigInt = byteArray.toInt(buf);
-          resolve(bigInt);
-          break;
-        }
-        case 'access': {
-          const int = byteArray.toInt(buf);
-          switch (int) {
-            case 0n:
-              resolve(false);
-              break;
-            case 1n:
-              resolve(true);
-              break;
-          }
-        }
-        default:
-          resolve();
-      }
     });
-    const returns = await Promise.all(promises);
-    const { length, } = returns;
-    switch (name) {
-      case 'glob': {
-        let paths = [];
-        returns.forEach((r) => {
-          paths = paths.concat(r);
-        });
-        break;
-      }
-      default:
-        return returns[0];
-    }
   }
 }

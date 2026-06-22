@@ -1,8 +1,8 @@
-import detect from 'detecd-port';
+import detect from 'detect-port';
 import ClientMethod from '~/decoration/ClientMethod';
 
 class StorageClient {
-  constructor(options, allStorages) {
+  constructor(options = {}, allStorages) {
     if (typeof options !== 'object' && options !== null) {
       throw new Error('[Error] The parameter options should be of type object.');
     }
@@ -12,12 +12,14 @@ class StorageClient {
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
     this.dealParams(allStorages);
-    this.index = getRandomIndex();
+    this.index = this.getRandomIndex();
   }
 
   getRandomIndex() {
     const {
-      allStorages: { length, },
+      allStorages: {
+        length,
+      },
     } = this;
     return Math.ceil(Math.random() * length);
   }
@@ -25,7 +27,9 @@ class StorageClient {
   getNextIndex() {
     const {
       index,
-      allStorages: { length, },
+      allStorages: {
+        length,
+      },
     } = this;
     if (index < length) {
       this.index += 1;
@@ -36,6 +40,9 @@ class StorageClient {
   }
 
   dealOptions() {
+  }
+
+  async dealPort() {
     const {
       options: {
         port,
