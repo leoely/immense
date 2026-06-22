@@ -812,8 +812,11 @@ class Storage {
       if (await existsPromise(destFilePath)) {
         throw new Error('[Error] The cp file path cannot exist.');
       }
-      await fsPromises.cp(srcFilePath, destFilePath, options);
-      await this.addEntireIndex(destPath);
+      const availableDelta = await this.getAvailableDelta(async () => {
+        await fsPromises.cp(srcFilePath, destFilePath, options);
+        await this.addEntireIndex(destPath);
+      });
+      this[temporaryUpdateDiskAvailableKey](availableDelta);
     }
     if (stats.isDirectory()) {
       const srcPosition = path.join(location, srcPath);
@@ -827,8 +830,11 @@ class Storage {
       if (!checkMultipleHidden(destPosition)) {
         throw new Error('[Error] Cannot operate hidden directorys.');
       }
-      await fsPromises.cp(srcPosition, destPosition, options);
-      await this[coverDirectoryIndexKey](destPath);
+      const availableDelta = await this.getAvailableDelta(async () => {
+        await fsPromises.cp(srcPosition, destPosition, options);
+        await this[coverDirectoryIndexKey](destPath);
+      });
+      this[temporaryUpdateDiskAvailableKey](availableDelta);
     }
   }
 
@@ -880,8 +886,11 @@ class Storage {
     if (!(path.extname(linkFilePath).length >= 1)) {
       throw new Error('[Error] The file you are working with needs to have its file extension specified.');
     }
-    await this.addEntireIndex(linkPlace);
-    await fsPromises.symlink(targetFilePath, linkFilePath);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await this.addEntireIndex(linkPlace);
+      await fsPromises.symlink(targetFilePath, linkFilePath);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async stats(place) {
@@ -904,7 +913,12 @@ class Storage {
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being get stats does not exist.');
     }
-    return await fsPromises.stat(filePath, { bigint: true, });
+    let stat;
+    const availableDelta = await this.getAvailableDelta(async () => {
+      stat = await fsPromises.stat(filePath, { bigint: true, });
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
+    return stat;
   }
 
   async chmod(place, mod) {
@@ -930,7 +944,10 @@ class Storage {
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being chmod does not exist.');
     }
-    await fsPromises.chmod(filePath, mod);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await fsPromises.chmod(filePath, mod);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async chown(place, uid, gid) {
@@ -959,7 +976,10 @@ class Storage {
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being chown does not exist.');
     }
-    await fsPromises.chown(filePath, uid, gid);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await fsPromises.chown(filePath, uid, gid);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async access(place, mod) {
@@ -1012,7 +1032,12 @@ class Storage {
     if (!stats.isSymbolicLink()) {
       throw new Error('[Error] The realpath operation is not applied to symbolic linkes.');
     }
-    return await fsPromises.realpath(filePath);
+    let realpath;
+    const availableDelta = await this.getAvailableDelta(async () => {
+      realpath = await fsPromises.realpath(filePath);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
+    return realPath;
   }
 
   async watch(place, options, listener) {
@@ -1068,7 +1093,12 @@ class Storage {
     if (!await existsPromise(position)) {
       throw new Error('[Error] The path being read dir does not exist.');
     }
-    return await fsPromises.readdir(position, options);
+    let dirs;
+    const availableDelta = await this.getAvailableDelta(async () => {
+      dirs = await fsPromises.readdir(position, options);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
+    return dirs;
   }
 
   async mkdir(directory) {
@@ -1080,7 +1110,10 @@ class Storage {
     if (!checkMultipleHidden(position)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
-    await fsPromises.mkdir(position);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      await fsPromises.mkdir(position);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async rmdir(directory) {
@@ -1095,19 +1128,22 @@ class Storage {
     if (!await existsPromise(position)) {
       throw new Error('[Error] The path being rmdir does not exist.');
     }
-    const dir = await fsPromises.opendir(position);
-    for await (const dirent of dir) {
-      const subDirectory = path.join(directory, dirent.name);
-      if (dirent.isDirectory()) {
-        await this.rmdir(subDirectory);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      const dir = await fsPromises.opendir(position);
+      for await (const dirent of dir) {
+        const subDirectory = path.join(directory, dirent.name);
+        if (dirent.isDirectory()) {
+          await this.rmdir(subDirectory);
+        }
+        if (dirent.isFile()) {
+          await this.removeEntireIndex(subDirectory);
+          const filePath = path.join(location, subDirectory)
+          await fsPromises.unlink(filePath);
+        }
       }
-      if (dirent.isFile()) {
-        await this.removeEntireIndex(subDirectory);
-        const filePath = path.join(location, subDirectory)
-        await fsPromises.unlink(filePath);
-      }
-    }
-    await fsPromises.rmdir(position);
+      await fsPromises.rmdir(position);
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
   async glob(pattern, options) {
@@ -1125,12 +1161,15 @@ class Storage {
       options = { cwd: location, };
     }
     const paths = [];
-    for await (const p of fsPromises.glob(pattern, options)) {
-      const position = path.join(location, p);
-      if (checkMultipleHidden(position)) {
-        paths.push(p);
+    const availableDelta = await this.getAvailableDelta(async () => {
+      for await (const p of fsPromises.glob(pattern, options)) {
+        const position = path.join(location, p);
+        if (checkMultipleHidden(position)) {
+          paths.push(p);
+        }
       }
-    }
+    });
+    this[temporaryUpdateDiskAvailableKey](availableDelta);
     return paths;
   }
 
