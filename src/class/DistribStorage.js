@@ -55,7 +55,6 @@ class DistribStorage extends Storage {
     this.status = 0;
     this.params = [];
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
-    this.outputDistribTopology();
     this.dealBuffer = this.dealBuffer.bind(this);
     this.checkMemory();
   }
@@ -214,134 +213,6 @@ class DistribStorage extends Storage {
     this.storages = storages;
   }
 
-  outputDistribTopology() {
-    const {
-      options: {
-        debug,
-        logLevel,
-      },
-      fulmination,
-    } = this;
-    if (logLevel !== 0) {
-      const storages = this.getStorages()
-      if (storages.length > 0) {
-        const storageTopologys = '[' + storages.join(', ') + ']';
-        const { ip, port, } = this;
-        this.appendToLog(
-          ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port + ' ████ & ████ TOPOLOGY:' + storageTopologys + ' ████ ||\n',
-        );
-      }
-    }
-    if (debug === true) {
-      const storages = this.getStorages();
-      if (Array.isArray(storages) && storages.length > 0) {
-        const storageFulminations = storages.map((storage) => {
-          return '(+) bold; dim: "b' + storage + '" (+): * | (+): *';
-        }).join(' ').concat(' &');
-        fulmination.scanAll([
-          [`
-            (+) blue; bold: * "&"& (+) bold: * DistribStorage (+) bold; dim: * show distributed topology. &
-            (+) blue; bold: ** └─ (+) : * | (+) : *
-            `, 0],
-          [storageFulminations, 0],
-        ]);
-        console.log(getGTMNowString() + '\n');
-      }
-    }
-  }
-
-  outputDistribOperate(operate, location) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      this.appendToLog(
-        ' || ████ Location:' + location + ' ████ & ████ OPERATE:' + operate + ' ████ ||\n',
-      );
-    }
-    if (debug === true) {
-      this.debugDetail(`
-        (+) bold; blue: * "&"& (+) green; bold: * Location (+) bold; dim: * ` + location + `. &
-        (+) bold; blue: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-      `);
-    }
-  }
-
-  outputDistribOperateError(operate, locations, error) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      locations.forEach((location) => {
-        this.appendToLog(
-          ' || ████ Location:' + location + ' ████ & ████ OPERATE:' + operate + ' ████ ||\n',
-        );
-      });
-      this.addToLog(error.stack + '\n');
-    }
-    if (debug === true) {
-      locations.forEach((location) => {
-        this.debugDetail(`
-          (+) bold; red: * !! (+) green; bold: * Location (+) bold; dim: * ` + location + `. &
-          (+) bold; red: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-        `);
-      })
-    }
-    throw error;
-  }
-
-  outputDistribFunction(operate) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      const { ip, port, } = this;
-      this.appendToLog(
-        ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port +  ' ████ & ████ OPEARATE:' + operate + ' ████ ||\n',
-      );
-    }
-    if (debug === true) {
-      const { ip, port, } = this;
-      this.debugDetail(`
-        (+) bold; blue: * "&"& (+) green; bold: * Ip (+) bold; dim: * ` + ip + ` (+) green; bold: * Port (+) bold; dim: * ` + port + ` . &
-        (+) bold; blue: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-      `);
-    }
-  }
-
-  outputDistribFunctionError(operate, error) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      const { ip, port, } = this;
-      this.appendToLog(
-        ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port +  ' ████ & ████ OPEARATE:' + operate + ' ████ ||\n',
-      );
-      this.addToLog(error.stack);
-    }
-    if (debug === true) {
-      const { ip, port, } = this;
-      this.debugDetail(`
-        (+) bold; red: * !! (+) green; bold: * Ip (+) bold; dim: * ` + ip + ` (+) green; bold: * Port (+) bold; dim: * ` + port + ` . &
-        (+) bold; red: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-      `);
-    }
-    throw error;
-  }
-
   getStorages() {
     const { storages, } = this;
     if (!Array.isArray(storages)) {
@@ -357,9 +228,7 @@ class DistribStorage extends Storage {
           resolve();
         });
       })
-      this.outputDistribFunction('close server');
     } catch (error) {
-      this.outputDistribFunctionError('close server', error);
     }
   }
 
@@ -368,9 +237,7 @@ class DistribStorage extends Storage {
       this.getClients().forEach((client) => {
         client.destroySoon();
       });
-      this.outputDistribFunction('close client');
     } catch (error) {
-      this.outputDistribFunctionError('close client', error);
     }
   }
 
@@ -386,9 +253,7 @@ class DistribStorage extends Storage {
       connections.forEach((connection) => {
         connection.destroySoon();
       });
-      this.outputDistribFunction('close connection');
     } catch (error) {
-      this.outputDistribFunctionError('close connection', error);
     }
   }
 
@@ -452,11 +317,9 @@ class DistribStorage extends Storage {
         server.listen(port);
       });
       const { server, } = this;
-      this.outputDistribFunction('setup client');
       this.checkMemory();
       return server;
     } catch (error) {
-      this.outputDistribFunctionError('setup client', error);
     }
   }
 
@@ -627,11 +490,9 @@ class DistribStorage extends Storage {
       });
       this.clients = await Promise.all(clientPromises);
       const { clients, } = this;
-      this.outputDistribFunction('setup client');
       this.checkMemory();
       return clients;
     } catch (error) {
-      this.outputDistribFunctionError('setup client');
     }
   }
 
@@ -676,7 +537,6 @@ class DistribStorage extends Storage {
         break;
       }
     }
-    this.outputDistribTopology();
   }
 
   async addStorage(ip, port) {
@@ -695,7 +555,6 @@ class DistribStorage extends Storage {
       clients.push(client);
     });
     this.checkMemory();
-    this.outputDistribTopology();
   }
 
   checkCombine() {
@@ -713,9 +572,7 @@ class DistribStorage extends Storage {
       });
       const existMessages = await Promise.all(responsePromises);
       return existMessages;
-      this.outputDistribOperate('existDistrib', location);
     } catch (error) {
-      this.outputDistribOperateError('existDistrib', [locaiton]);
     }
   }
 
@@ -728,9 +585,7 @@ class DistribStorage extends Storage {
       });
       const availableMessages = await Promise.all(repsonsePromises);
       return availableMessages;
-      this.outputDistribOperate('getAvailableDistrib', location);
     } catch (error) {
-      this.outputDistribOperateError('getAvailableDistrib', [locaiton]);
     }
   }
 
@@ -743,9 +598,7 @@ class DistribStorage extends Storage {
       });
       const existMessages = await Promise.all(responsePromises);
       return existMessages;
-      this.outputDistribOperate('presenceDistrib', location);
     } catch (error) {
-      this.outputDistribOperateError('presenceDistrib', [locaiton]);
     }
   }
 
@@ -863,7 +716,7 @@ class DistribStorage extends Storage {
       }
       case 'glob': {
         const { storages, } = this;
-        storages.forEach(([ip, port] => sites.push[ip, port]));
+        storages.forEach(([ip, port]) => sites.push([ip, port]));
         const { ip, port, } = this;
         sites.push([ip, port]);
         break;

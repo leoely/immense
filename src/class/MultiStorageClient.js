@@ -1,6 +1,4 @@
-import StorageClient from '~/class/StorageClient';
-
-class MultiStorageClient extends StorageClient {
+class MultiStorageClient {
 }
 
 export default MultiStorageClient;

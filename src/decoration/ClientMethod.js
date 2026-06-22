@@ -95,6 +95,13 @@ export default function ClientMethod(value, { kind, name, }) {
           resolve();
       }
     });
-    await Promise.all(promises);
+    const returns = await Promise.all(promises);
+    const { length, } = returns;
+    switch (name) {
+      case 'glob':
+        break;
+      default:
+        return returns[0];
+    }
   }
 }

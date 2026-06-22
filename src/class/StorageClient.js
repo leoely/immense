@@ -1,5 +1,5 @@
 import detect from 'detecd-port';
-import client from '~/decoration/client';
+import ClientMethod from '~/decoration/ClientMethod';
 
 class StorageClient {
   constructor(options, allStorages) {
@@ -78,6 +78,63 @@ class StorageClient {
 
   @ClientMethod
   async readBufferPiece(place, position, length) {}
+
+  @ClientMethod
+  async writeBufferPiece(place, position, buffer) {}
+
+  @ClientMethod
+  async writeBuffer(place, buffer) {}
+
+  @ClientMethod
+  async addBuffer(place, buffer) {}
+
+  @ClientMethod
+  async appendData(place, data) {}
+
+  @ClientMethod
+  async remove(place) {}
+
+  @ClientMethod
+  async truncate(place, length) {}
+
+  @ClientMethod
+  async rename(oldPlace, newPlace) {}
+
+  @ClientMethod
+  async diskOccupy(place) {}
+
+  @ClientMethod
+  async cp(srcPath, destPath, options) {}
+
+  @ClientMethod
+  async link(targetPlace, linkPlace) {}
+
+  @ClientMethod
+  async stats(place) {}
+
+  @ClientMethod
+  async chmod(place, mod) {}
+
+  @ClientMethod
+  async chown(place, uid, gid) {}
+
+  @ClientMethod
+  async access(place, mod) {}
+
+  @ClientMethod
+  async realpath(place) {}
+
+  @ClientMethod
+  async readdir(directory, options) {}
+
+  @ClientMethod
+  async mkdir(directory) {}
+
+  @ClientMethod
+  async rmdir(directory) {}
+
+  @ClientMethod
+  async glob(pattern, options) {}
 }
 
 export default StorageClient;
