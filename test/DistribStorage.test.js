@@ -26,13 +26,13 @@ describe('[Class] DistribStorage;', () => {
     const [ipAddress] = getOwnIpAddresses();
     const { ipv6, } = ipAddress;
     const storages = [
-      [ipv6, 8002],
-      [ipv6, 8003],
+      [ipv6, 8004],
+      [ipv6, 8005],
     ];
     const distribStorage1 = new DistribStorage('/tmp/test3', {
-    }, 8002, storages);
+    }, 8004, storages);
     const distribStorage2 = new DistribStorage('/tmp/test4', {
-    }, 8003, storages);
+    }, 8005, storages);
     await DistribStorage.combine([distribStorage1, distribStorage2]);
     await DistribStorage.release([distribStorage1, distribStorage2]);
   });
@@ -41,16 +41,16 @@ describe('[Class] DistribStorage;', () => {
     const [ipAddress] = getOwnIpAddresses();
     const { ipv6, } = ipAddress;
     const storages = [
-      [ipv6, 8004],
-      [ipv6, 8005],
+      [ipv6, 8006],
+      [ipv6, 8007],
     ];
     const distribStorage1 = new DistribStorage('/tmp/test5', {
       temporaryDiskAvailable: 5000,
-    }, 8004, storages);
+    }, 8006, storages);
     distribStorage1.setTemporaryDiskSwitch(true);
     const distribStorage2 = new DistribStorage('/tmp/test6', {
       temporaryDiskAvailable: 5000,
-    }, 8005, storages);
+    }, 8007, storages);
     distribStorage2.setTemporaryDiskSwitch(true);
     const storageClient = new StorageClient({
       port: 49152,

@@ -50,6 +50,7 @@ class DistribStorage extends Storage {
   constructor(location, options, port, allStorages) {
     super(location, options);
     this.dealParams(port, allStorages);
+    this.requests = [];
     this.count = 0;
     this.state = 0;
     this.status = 0;
@@ -317,9 +318,12 @@ class DistribStorage extends Storage {
         });
         server.listen(port);
       });
-      const { server, } = this;
-      return server;
+      this.server = net.createServer((connection) => {
+        this.requests.push(connection);
+      });
+      return this.server;
     } catch (error) {
+      console.log(error);
     }
   }
 
@@ -442,8 +446,8 @@ class DistribStorage extends Storage {
         this.type = '';
         this.method = '';
         this.state = 0;
-        connection.destorySoon();
         this.count -= 1;
+        connection.destorySoon();
         break;
       }
       case 2: {

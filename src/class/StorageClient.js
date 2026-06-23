@@ -1,5 +1,6 @@
+import net from 'net';
 import detect from 'detect-port';
-import ClientMethod from '~/decoration/ClientMethod';
+import dataPromise from '~/lib/util/dataPromise';
 
 class StorageClient {
   constructor(options = {}, allStorages) {
@@ -21,7 +22,7 @@ class StorageClient {
         length,
       },
     } = this;
-    return Math.ceil(Math.random() * length);
+    return Math.ceil(Math.random() * (length - 1));
   }
 
   getNextIndex() {
@@ -31,10 +32,10 @@ class StorageClient {
         length,
       },
     } = this;
-    if (index < length) {
-      this.index += 1;
-    } else {
+    if (index === length - 1) {
       this.index = 0;
+    } else {
+      this.index += 1;
     }
     return this.index;
   }
@@ -87,68 +88,178 @@ class StorageClient {
     this.allStorages = allStorages;
   }
 
-  @ClientMethod
-  async readData(place, options) {}
+  async callBigDataMethod(name, ...params) {
+    const index = this.getNextIndex();
+    const { allStorages, } = this;
+    const [ip, port] = allStorages[index];
+    const sites = await new Promise((resolve, reject) => {
+      const client = net.createConnection(port, ip, async () => {
+        console.log('client', client.localPort);
+        //client.write(Buffer.from('distrib'));
+        //client.write(Buffer.from(name));
+        //const sitesBuffer = await dataPromise(client);
+        //const sites = JSON.stringify(siteBuffer.toString());
+        //resolve(sites);
+        //client.destorySoon();
+      });
+    });
+    //const promises = sites.map(([ip, port]) => {
+      //return new Promise((resolve, reject) => {
+        //const client = net.createConnection(port, ip, async () => {
+          //client.write('redirect');
+          //params.forEach((param) => {
+            //switch (typeof param) {
+              //case 'string':
+                //client.write(byteArray.fromInt(0n));
+                //break;
+              //case 'object':
+                //if (Buffer.isBuffer(param)) {
+                  //client.write(byteArray.fromInt(4n));
+                //} else {
+                  //client.write(byteArray.fromInt(1n));
+                //}
+                //break;
+              //case 'number':
+                //client.write(byteArray.fromInt(2n));
+                //break;
+              //case 'bigint':
+                //client.write(byteArray.fromInt(3n));
+                //break;
+            //}
+            //client.write(param);
+          //});
+          //client.write(Buffer.from('end'));
+          //const buffer = await dataPromise(client);
+          //switch (method) {
+            //case 'realpath': {
+              //resolve(buf.toString());
+              //break;
+            //}
+            //case 'readData': {
+              //const options = params[1];
+              //if (typeof options === 'object') {
+                //const { encoding, } = options;
+                //if (typeof encoding === 'string' && encoding.length > 0) {
+                  //resolve(buffer.toString());
+                //}
+              //}
+              //resolve(buffer);
+              //break;
+            //}
+            //case 'readBufferPiece': {
+              //resolve(buffer);
+              //break;
+            //}
+            //case 'glob':
+            //case 'readdir':
+            //case 'stats': {
+              //resolve(JSON.stringify(buf.toString()));
+              //break;
+            //}
+            //case 'diskOccupy': {
+              //const bigInt = byteArray.toInt(buf);
+              //resolve(bigInt);
+              //break;
+            //}
+            //case 'access': {
+              //const int = byteArray.toInt(buf);
+              //switch (int) {
+                //case 0n:
+                  //resolve(false);
+                  //break;
+                //case 1n:
+                  //resolve(true);
+                  //break;
+              //}
+            //}
+            //default:
+              //resolve();
+          //}
+          //client.destorySoon();
+        //});
+      //});
+    //});
+    //const returns = await Promise.all(promises);
+    //const { length, } = returns;
+    //switch (name) {
+      //case 'glob': {
+        //let paths = [];
+        //returns.forEach((r) => {
+          //paths = paths.concat(r);
+        //});
+        //break;
+      //}
+      //default:
+        //return returns[0];
+    //}
+  }
 
-  @ClientMethod
-  async readBufferPiece(place, position, length) {}
+  async readData(place, options) {
+  }
 
-  @ClientMethod
-  async writeBufferPiece(place, position, buffer) {}
+  async readBufferPiece(place, position, length) {
+  }
 
-  @ClientMethod
-  async writeBuffer(place, buffer) {}
+  async writeBufferPiece(place, position, buffer) {
+    this.callBigDataMethod('writeBufferPiece', ...params);
+  }
 
-  @ClientMethod
-  async addBuffer(place, buffer) {}
+  async writeBuffer(...params) {
+    this.callBigDataMethod('writeBuffer', ...params);
+  }
 
-  @ClientMethod
-  async appendData(place, data) {}
+  async addBuffer(...params) {
+    this.callBigDataMethod('addBuffer', ...params);
+  }
 
-  @ClientMethod
-  async remove(place) {}
+  async appendData(...params) {
+    this.callBigDataMethod('appendData', ...params);
+  }
 
-  @ClientMethod
-  async truncate(place, length) {}
+  async remove(place) {
+  }
 
-  @ClientMethod
-  async rename(oldPlace, newPlace) {}
+  async truncate(place, length) {
+  }
 
-  @ClientMethod
-  async diskOccupy(place) {}
+  async rename(oldPlace, newPlace) {
+  }
 
-  @ClientMethod
-  async cp(srcPath, destPath, options) {}
+  async diskOccupy(place) {
+  }
 
-  @ClientMethod
-  async link(targetPlace, linkPlace) {}
+  async cp(srcPath, destPath, options) {
+  }
 
-  @ClientMethod
-  async stats(place) {}
+  async link(targetPlace, linkPlace) {
+  }
 
-  @ClientMethod
-  async chmod(place, mod) {}
+  async stats(place) {
+  }
 
-  @ClientMethod
-  async chown(place, uid, gid) {}
+  async chmod(place, mod) {
+  }
 
-  @ClientMethod
-  async access(place, mod) {}
+  async chown(place, uid, gid) {
+  }
 
-  @ClientMethod
-  async realpath(place) {}
+  async access(place, mod) {
+  }
 
-  @ClientMethod
-  async readdir(directory, options) {}
+  async realpath(place) {
+  }
 
-  @ClientMethod
-  async mkdir(directory) {}
+  async readdir(directory, options) {
+  }
 
-  @ClientMethod
-  async rmdir(directory) {}
+  async mkdir(directory) {
+  }
 
-  @ClientMethod
-  async glob(pattern, options) {}
+  async rmdir(directory) {
+  }
+
+  async glob(pattern, options) {
+  }
 }
 
 export default StorageClient;
