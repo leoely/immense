@@ -1192,8 +1192,8 @@ class Storage {
   }
 
   async available() {
-    const diskUsage = await this.getDiskUsage();
-    return diskUsgae.availble;
+    const diskUsage = await this.diskUsage();
+    return diskUsage.availble;
   }
 
   setTemporaryDiskSwitch(temporaryDiskSwitch) {

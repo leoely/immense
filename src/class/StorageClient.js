@@ -56,31 +56,6 @@ class StorageClient {
     }
   }
 
-  async yieldPort() {
-    const {
-      options: {
-        port,
-      },
-    } = this;
-    if (port !== undefined) {
-      for (let i = port; i < 65535; i += 1) {
-        const realPort = await detect(i);
-        if (i === realPort) {
-          this.port = i;
-          break;
-        }
-      }
-    } else {
-      for (let i = 49152; i <= 65535; i += 1) {
-        const realPort = await detect(i);
-        if (i === realPort) {
-          this.port = i;
-          break;
-        }
-      }
-    }
-  }
-
   dealParams(allStorages) {
     if (Array.isArray(allStorages) !== true) {
       throw new Error('[Error] The parameter all storages should be array type.');
@@ -94,13 +69,17 @@ class StorageClient {
     const [ip, port] = allStorages[index];
     const sites = await new Promise((resolve, reject) => {
       const client = net.createConnection(port, ip, async () => {
-        console.log('client', client.localPort);
-        //client.write(Buffer.from('distrib'));
-        //client.write(Buffer.from(name));
-        //const sitesBuffer = await dataPromise(client);
-        //const sites = JSON.stringify(siteBuffer.toString());
-        //resolve(sites);
-        //client.destorySoon();
+        client.write('distrib');
+        client.write(name);
+        switch (name) {
+          case 'addBuffer':
+            client.write(JSON.stringify(params.slice(0, 1)));
+            break;
+        }
+        const buffer = await dataPromise(client);
+        const sites = JSON.parse(buffer.toString());
+        resolve(sites);
+        client.destroySoon();
       });
     });
     //const promises = sites.map(([ip, port]) => {
@@ -201,19 +180,19 @@ class StorageClient {
   }
 
   async writeBufferPiece(place, position, buffer) {
-    this.callBigDataMethod('writeBufferPiece', ...params);
+    return this.callBigDataMethod('writeBufferPiece', ...params);
   }
 
   async writeBuffer(...params) {
-    this.callBigDataMethod('writeBuffer', ...params);
+    return this.callBigDataMethod('writeBuffer', ...params);
   }
 
   async addBuffer(...params) {
-    this.callBigDataMethod('addBuffer', ...params);
+    return this.callBigDataMethod('addBuffer', ...params);
   }
 
   async appendData(...params) {
-    this.callBigDataMethod('appendData', ...params);
+    return this.callBigDataMethod('appendData', ...params);
   }
 
   async remove(place) {

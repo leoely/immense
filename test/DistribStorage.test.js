@@ -52,10 +52,7 @@ describe('[Class] DistribStorage;', () => {
       temporaryDiskAvailable: 5000,
     }, 8007, storages);
     distribStorage2.setTemporaryDiskSwitch(true);
-    const storageClient = new StorageClient({
-      port: 49152,
-    }, storages);
-    await storageClient.yieldPort();
+    const storageClient = new StorageClient({}, storages);
     await DistribStorage.combine([distribStorage1, distribStorage2]);
     await storageClient.addBuffer('test-bigdata-operation/operation.txt', Buffer.from('perform big data related operations.'));
     await DistribStorage.release([distribStorage1, distribStorage2]);

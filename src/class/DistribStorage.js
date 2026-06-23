@@ -14,8 +14,8 @@ function getBinBuf(params) {
     throw new Error('[Error] The params parameter should be an array type.');
   }
   const { length, } = params;
-  if (length <= 1) {
-    throw new Error('[Error] The length of the params parameter should be greater than or equal to two');
+  if (length !== 1 && length !== 4) {
+    throw new Error('[Error] The length of the params parameter should be equal to one or four.');
   }
   const pbytes = [];
   params.forEach((param) => {
@@ -50,7 +50,7 @@ class DistribStorage extends Storage {
   constructor(location, options, port, allStorages) {
     super(location, options);
     this.dealParams(port, allStorages);
-    this.requests = [];
+    this.request = null;
     this.count = 0;
     this.state = 0;
     this.status = 0;
@@ -306,7 +306,7 @@ class DistribStorage extends Storage {
             this.connections.push(connection);
             this.count += 1;
           } else if (count === length) {
-            this.addRequest(connection);
+            this.setRequest(connection);
             this.count += 1;
           } else {
             connection.destroySoon();
@@ -319,15 +319,15 @@ class DistribStorage extends Storage {
         server.listen(port);
       });
       this.server = net.createServer((connection) => {
-        this.requests.push(connection);
+        this.request = connection;
       });
-      return this.server;
+      const { server, } = this;
+      return server;
     } catch (error) {
-      console.log(error);
     }
   }
 
-  dealRequestBuffer(buf) {
+  dealRedirectBuffer(buf) {
     const { status, byteArray, } = this;
     switch (status) {
       case 1:
@@ -374,67 +374,68 @@ class DistribStorage extends Storage {
   }
 
   async dealDistribBuffer(buf) {
-    this.method = buf.toString();
+    const { length, } = buf;
+    for (let i = 0; i < length; i += 1) {
+      if (buf[i] === 91) {
+        this.method = buf.subarray(0, i).toString();
+        this.params = JSON.parse(buf.subarray(i, length).toString());
+      }
+    }
     const sites = await this.treatSitesDistrib();
     return sites;
   }
 
   async dealBuffer(buf) {
-    const { length, } = buf;
-    switch (length) {
-      case 7:
-        if (buf.toString() === 'distrib') {
+    const { state, } = this;
+    switch (state) {
+      case 0: {
+        if (buf.subarray(0, 7).toString() === 'distrib') {
+          const { length, } = buf;
+          buf = buf.subarray(7, length);
           this.state = 2;
-        }
-        break;
-      case 3:
-        if (buf.toString() === 'end') {
+          this.dealBuffer(buf);
+        } else if (buf.subarray(0, 3).toString() === 'end') {
           this.state = 1;
-        }
-        break;
-      case 8:
-        if (buf.toString() === 'redirect') {
+        } else if (buf.subarray(0, 8).toString() === 'redirect') {
           this.state = 3;
         }
         break;
-    }
-    const { state, } = this;
-    switch (state) {
+      }
       case 1: {
-        this.dealRequestBuffer(buf);
-        const { method, params, } = this;
+        this.dealRedirectBuffer(buf);
+        const { method, params, request: connection, } = this;
         if (method !== '') {
           switch (method) {
             case 'realpath': {
               const string = await this[method](...params);
-              connection.send(Buffer.from(string));
+              connection.write(string);
               break;
             }
             case 'readData':
             case 'readBufferPiece': {
               const buffer = await this[method](...params);
-              connection.send(buffer);
+              connection.write(buffer);
               break;
             }
             case 'glob':
             case 'readdir':
             case 'stats': {
               const stats = await this[method](...params);
-              const jsonString = JSON.string(stats);
-              connection.send(Buffer.from(jsonString));
+              const json = JSON.stringify(stats);
+              connection.write(json);
               break;
             }
             case 'diskOccupy': {
               const bigInt = await this[method](...params);
-              connection.send(byteArray.fromInt(bigInt));
+              connection.write(byteArray.fromInt(bigInt));
               break;
             }
             case 'access':
               try {
                 await this[method](...params);
-                connection.send(byteArray.fromInt(1));
+                connection.write(byteArray.fromInt(1));
               } catch (error) {
-                connection.send(byteArray.fromInt(0));
+                connection.write(byteArray.fromInt(0));
               }
               break;
             default:
@@ -453,26 +454,28 @@ class DistribStorage extends Storage {
       case 2: {
         const sites = await this.dealDistribBuffer(buf);
         const string = JSON.stringify(sites);
-        connection.send(Buffer.from(string));
+        const { request: connection, } = this;
+        connection.write(string);
         this.method = '';
+        this.params = [];
         this.state = 0;
         break;
       }
       case 3:
-        this.dealRequestBuffer(buf);
+        this.dealRedirectBuffer(buf);
         break;
     }
   }
 
-  addRequest(connection) {
+  setRequest(connection) {
+    this.request = connection;
     connection.on('data', this.dealBuffer);
     connection.on('close', () => {
-      this.requests.filter((request) => connection !== request);
+      this.request = null;
     });
-    connection.on('error', () => {
-      this.requests.filter((request) => connection !== request);
+    connection.on('error', (error) => {
+      this.request = null;
     });
-    this.requests.push(connection);
   }
 
   async setUpClients() {
@@ -510,6 +513,7 @@ class DistribStorage extends Storage {
     }
     const bigInt1 = nonZeroByteArray.toInt(segments.shift());
     const code = Number(bigInt1);
+    const { ip, port, } = this;
     switch (code) {
       case 0: {
         const exists = await this.exists();
@@ -517,7 +521,7 @@ class DistribStorage extends Storage {
         break;
       }
       case 1: {
-        const available = await this.getAvailable();
+        const available = await this.available();
         connection.write(getBinBuf([1, available, ip, port]));
         break;
       }
@@ -575,6 +579,7 @@ class DistribStorage extends Storage {
       const existMessages = await Promise.all(responsePromises);
       return existMessages;
     } catch (error) {
+      throw error;
     }
   }
 
@@ -585,9 +590,10 @@ class DistribStorage extends Storage {
       const responsePromises = this.getResponsePromises((client) => {
         client.write(getBinBuf([1]));
       });
-      const availableMessages = await Promise.all(repsonsePromises);
+      const availableMessages = await Promise.all(responsePromises);
       return availableMessages;
     } catch (error) {
+      throw error;
     }
   }
 
@@ -601,6 +607,7 @@ class DistribStorage extends Storage {
       const existMessages = await Promise.all(responsePromises);
       return existMessages;
     } catch (error) {
+      throw error;
     }
   }
 
@@ -642,21 +649,22 @@ class DistribStorage extends Storage {
     }
   }
 
-  async treatAvailableDistrib(place, options) {
-    const availableResults = await avaiableDistrib();
+  async treatAvailableDistrib(place) {
+    const availableResults = await this.availableDistrib(place);
     let max = -Infinity;
     const site = [];
-    availableResults.forEach(([available, ip, port]) => {
-      if (available > max) {
-        site[0] = ip;
-        site[1] = port;
-      }
-    });
-    return ans;
+    //availableResults.forEach(([available, ip, port]) => {
+      //if (available > max) {
+        //site[0] = ip;
+        //site[1] = port;
+      //}
+    //});
+    return site;
   }
 
-  async treatSitesDistrib(method, params) {
+  async treatSitesDistrib() {
     const sites = [];
+    const { method, params, } = this;
     switch (method) {
       case 'realpath':
       case 'access':
@@ -671,14 +679,14 @@ class DistribStorage extends Storage {
       case 'truncate':
       case 'readData': {
         const [place] = params;
-        site = await treatExistsDistrib(place);
+        site = await this.treatExistsDistrib(place);
         sites.push(site);
         break;
       }
       case 'diskOccupy': {
         const [place] = params;
-        const site1 = await treatExistDistrib(place);
-        const site2 = await treatPresenceDistrib(place);
+        const site1 = await this.treatExistDistrib(place);
+        const site2 = await this.treatPresenceDistrib(place);
         if (site1 <= site2) {
           site = site2;
         } else {
@@ -689,7 +697,7 @@ class DistribStorage extends Storage {
       }
       case 'addBuffer': {
         const [place] = params;
-        site = await treatAvaibleDistrib(place);
+        site = await this.treatAvailableDistrib(place);
         sites.push(site);
         break;
       }
@@ -698,7 +706,7 @@ class DistribStorage extends Storage {
         const [place1, place2] = params;
         site = await treatAvaibleDistrib(place);
         sites.push(site);
-        const dontExist = await treatDontExistsDistrib(place2);
+        const dontExist = await this.treatDontExistsDistrib(place2);
         if (dontExist !== true) {
           throw new Error('[Error] The path currently being operated on already exists.');
         }
@@ -708,7 +716,7 @@ class DistribStorage extends Storage {
       case 'rmdir':
       case 'readdir': {
         const [diectory] = params;
-        site = await treatPresenceDistrib(directory);
+        site = await this.treatPresenceDistrib(directory);
         storages.forEach(([ip, port]) => sites.push([ip, port]));
         const { ip, port, } = this;
         sites.push([ip, port]);
@@ -718,7 +726,7 @@ class DistribStorage extends Storage {
         const [directory1, directory] = params;
         site = await treatAvaibleDistrib(directory1);
         sites.push(site);
-        const dontExist = await treatDontPresenceDistrib(directory2);
+        const dontExist = await this.treatDontPresenceDistrib(directory2);
         if (dontExist !== true) {
           throw new Error('[Error] The path currently being operated on already exists.');
         }
@@ -732,6 +740,7 @@ class DistribStorage extends Storage {
         break;
       }
     }
+    return sites;
   }
 }
 
