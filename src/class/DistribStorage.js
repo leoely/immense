@@ -665,10 +665,21 @@ class DistribStorage extends Storage {
       case 'appendData':
       case 'remove':
       case 'truncate':
-      case 'diskOccupy':
       case 'readData': {
         const [place] = params;
         site = await treatExistsDistrib(place);
+        sites.push(site);
+        break;
+      }
+      case 'diskOccupy': {
+        const [place] = params;
+        const site1 = await treatExistDistrib(place);
+        const site2 = await treatPresenceDistrib(place);
+        if (site1 <= site2) {
+          site = site2;
+        } else {
+          site = site1;
+        }
         sites.push(site);
         break;
       }
@@ -689,17 +700,14 @@ class DistribStorage extends Storage {
         }
         break;
       }
+      case 'mkdir':
       case 'rmdir':
       case 'readdir': {
         const [diectory] = params;
         site = await treatPresenceDistrib(directory);
-        sites.push(site);
-        break;
-      }
-      case 'mkdir': {
-        const [place] = params;
-        site = await treatPresenceDistrib(directory);
-        sites.push(site);
+        storages.forEach(([ip, port]) => sites.push([ip, port]));
+        const { ip, port, } = this;
+        sites.push([ip, port]);
         break;
       }
       case 'cp': {

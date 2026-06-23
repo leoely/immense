@@ -440,7 +440,7 @@ class Storage {
       },
     } = this;
     if (temporaryDiskSwitch === true) {
-      this[temporaryDiskAvaiable] -= availableDelta;
+      this[temporaryDiskAvaiableKey] -= availableDelta;
     }
   }
 
@@ -1211,7 +1211,7 @@ class Storage {
         options,
       } = this;
       options.acquireAvailableDelta = true;
-      this[temporaryDiskAviableKey] = temporaryDiskAvailable;
+      this[temporaryDiskAvailableKey] = temporaryDiskAvailable;
     }
   }
 

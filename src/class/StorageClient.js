@@ -40,9 +40,6 @@ class StorageClient {
   }
 
   dealOptions() {
-  }
-
-  async dealPort() {
     const {
       options: {
         port,
@@ -55,6 +52,16 @@ class StorageClient {
       if (port < 49152 || port > 65535) {
         throw new Error('[Error] The range of parameter port should be [49152, 65535].')
       }
+    }
+  }
+
+  async yieldPort() {
+    const {
+      options: {
+        port,
+      },
+    } = this;
+    if (port !== undefined) {
       for (let i = port; i < 65535; i += 1) {
         const realPort = await detect(i);
         if (i === realPort) {

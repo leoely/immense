@@ -93,22 +93,22 @@ export default function ClientMethod(value, { kind, name, }) {
             default:
               resolve();
           }
-          const returns = await Promise.all(promises);
-          const { length, } = returns;
-          switch (name) {
-            case 'glob': {
-              let paths = [];
-              returns.forEach((r) => {
-                paths = paths.concat(r);
-              });
-              break;
-            }
-            default:
-              return returns[0];
-          }
           client.destorySoon();
         });
       });
     });
+    const returns = await Promise.all(promises);
+    const { length, } = returns;
+    switch (name) {
+      case 'glob': {
+        let paths = [];
+        returns.forEach((r) => {
+          paths = paths.concat(r);
+        });
+        break;
+      }
+      default:
+        return returns[0];
+    }
   }
 }
