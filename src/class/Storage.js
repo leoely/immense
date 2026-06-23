@@ -1446,7 +1446,7 @@ class Storage {
               update = true;
               break;
             } else {
-              words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+              words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count + 1n), 1]);
             }
           } else {
             words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
@@ -1638,7 +1638,7 @@ class Storage {
           bytes = [];
           status = 1;
         } else if (status === 3) {
-          words.push(0);
+          //words.push(0);
           status = 0;
         }
       } else if (byte === 1) {
@@ -1659,8 +1659,6 @@ class Storage {
                 idx = i;
                 remove = true;
                 break;
-              } else {
-                words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
               }
             } else {
               if (checkTransitByte(count, count - 1n, shiftTwoBytes)) {
@@ -1669,11 +1667,11 @@ class Storage {
                 update = true;
                 break;
               } else {
-                words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+                words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count - 1n), 1, 0]);
               }
             }
           } else {
-            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1, 0]);
           }
           bytes = [];
           status = 3;
@@ -1703,10 +1701,14 @@ class Storage {
         await fsyncPromise(fd);
         await closePromise(fd);
       } else {
-        const fd = await openPromise(countsPath, 'w');
-        await writePromise(fd, Buffer.from(words.flat()));
-        await fsyncPromise(fd);
-        await closePromise(fd);
+        if (words.length === 0) {
+          await fsPromises.unlink(countsPath);
+        } else {
+          const fd = await openPromise(countsPath, 'w');
+          await writePromise(fd, Buffer.from(words.flat()));
+          await fsyncPromise(fd);
+          await closePromise(fd);
+        }
       }
     }
   }
