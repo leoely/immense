@@ -378,6 +378,7 @@ class Storage {
       minimumStorageCapacity: 5 * 1024 ** 3,
       acquireAvaiableDelta: false,
       temporaryDiskAvailable: -1,
+      temporaryDiskSwitch: false,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
@@ -440,7 +441,7 @@ class Storage {
       },
     } = this;
     if (temporaryDiskSwitch === true) {
-      this[temporaryDiskAvaiableKey] -= availableDelta;
+      this[temporaryDiskAvailableKey] -= availableDelta;
     }
   }
 
@@ -1192,8 +1193,17 @@ class Storage {
   }
 
   async available() {
-    const diskUsage = await this.diskUsage();
-    return diskUsage.availble;
+    const {
+      options: {
+        temporaryDiskSwitch,
+      },
+    } = this;
+    if (temporaryDiskSwitch === true) {
+      return this[temporaryDiskAvailableKey];
+    } else {
+      const diskUsage = await this.diskUsage();
+      return diskUsage.available;
+    }
   }
 
   setTemporaryDiskSwitch(temporaryDiskSwitch) {
@@ -1638,7 +1648,6 @@ class Storage {
           bytes = [];
           status = 1;
         } else if (status === 3) {
-          //words.push(0);
           status = 0;
         }
       } else if (byte === 1) {

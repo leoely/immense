@@ -133,8 +133,8 @@ class DistribStorage extends Storage {
           const code = Number(bigInt1);
           let params;
           switch (code) {
-            case 1:
             case 0:
+            case 2:
               params = segments.map((segment, index) => {
                 switch (index) {
                   case 0: {
@@ -201,11 +201,23 @@ class DistribStorage extends Storage {
       let flag = true;
       for (let i = 0; i< locations.length ; i += 1) {
         const location = locations[i];
-        if (storage.join(':') === location) {
-          const [ip] = storage;
-          this.ip = ip;
-          flag = false;
-          break;
+        const [ip] = storage;
+        if (net.isIPv4(ip)) {
+          if (storage.join(':') === location) {
+            const [ip] = storage;
+            this.ip = ip;
+            flag = false;
+            break;
+          }
+        } else if (net.isIPv6(ip)) {
+          const [ip, port] = storage;
+          const formatStorage = ['[' + ip + ']', port];
+          if (formatStorage.join(':') === location) {
+            const [ip] = storage;
+            this.ip = ip;
+            flag = false;
+            break;
+          }
         }
       }
       return flag;
@@ -569,6 +581,7 @@ class DistribStorage extends Storage {
       throw new Error('[Error] Distributed node integration is not yet complete.');
     }
   }
+
   async existsDistrib(place) {
     try {
       this.checkCombine();
@@ -576,7 +589,9 @@ class DistribStorage extends Storage {
       const responsePromises = this.getResponsePromises((client) => {
         client.write(getBinBuf([0]));
       });
-      const existMessages = await Promise.all(responsePromises);
+      const existsMessages = await Promise.all(responsePromises);
+      const { ip, port, } = this;
+      existsMessages.push([exists, ip, BigInt(port)]);
       return existMessages;
     } catch (error) {
       throw error;
@@ -591,6 +606,8 @@ class DistribStorage extends Storage {
         client.write(getBinBuf([1]));
       });
       const availableMessages = await Promise.all(responsePromises);
+      const { ip, port, } = this;
+      availableMessages.push([BigInt(available), ip, BigInt(port)]);
       return availableMessages;
     } catch (error) {
       throw error;
@@ -604,8 +621,10 @@ class DistribStorage extends Storage {
       const responsePromises = this.getResponsePromises((client) => {
         client.write(getBinBuf([2]));
       });
-      const existMessages = await Promise.all(responsePromises);
-      return existMessages;
+      const presenceMessages = await Promise.all(responsePromises);
+      const { ip, port, } = this;
+      presenceMessages.push([presence, ip, BigInt(port)]);
+      return presenceMessages;
     } catch (error) {
       throw error;
     }
@@ -653,12 +672,12 @@ class DistribStorage extends Storage {
     const availableResults = await this.availableDistrib(place);
     let max = -Infinity;
     const site = [];
-    //availableResults.forEach(([available, ip, port]) => {
-      //if (available > max) {
-        //site[0] = ip;
-        //site[1] = port;
-      //}
-    //});
+    availableResults.forEach(([available, ip, port]) => {
+      if (available > max) {
+        site[0] = ip;
+        site[1] = Number(port);
+      }
+    });
     return site;
   }
 
