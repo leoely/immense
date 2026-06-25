@@ -127,7 +127,6 @@ class StorageClient {
             switch (typeof param) {
               case 'string':
                 client.write(Buffer.from(shiftOneByteArray.fromInt(0n)));
-                client.write(Buffer.from([0]));
                 break;
               case 'object':
                 if (Buffer.isBuffer(param)) {
@@ -135,22 +134,19 @@ class StorageClient {
                 } else {
                   client.write(Buffer.from(shiftOneByteArray.fromInt(1n)));
                 }
-                client.write(Buffer.from([0]));
                 break;
               case 'number':
                 client.write(Buffer.from(shiftOneByteArray.fromInt(2n)));
-                client.write(Buffer.from([0]));
                 break;
               case 'bigint':
                 client.write(Buffer.from(shiftOneByteArray.fromInt(3n)));
-                client.write(Buffer.from([0]));
                 break;
             }
             switch (typeof param) {
               case 'string': {
                 const buffer = Buffer.from(param);
                 this.writeBufferLength(client, buffer);
-                client.write(Buffer.from(param));
+                client.write(buffer);
                 break;
               }
               case 'object':
@@ -167,14 +163,13 @@ class StorageClient {
               case 'number':
               case 'bigint': {
                 const buffer = Buffer.from(shiftOneByteArray.fromInt(param));
-                writeBufferLength(client, buffer);
-                client.write();
+                this.writeBufferLength(client, buffer);
+                client.write(buffer);
                 break;
               }
             }
-            client.write(param);
           });
-          //client.write(Buffer.from('end'));
+          client.write(Buffer.from('end'));
           //const buffer = await dataPromise(client);
           //switch (method) {
             //case 'realpath': {

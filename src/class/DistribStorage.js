@@ -347,7 +347,7 @@ class DistribStorage extends Storage {
   getRestBuffer(buf) {
     const { length, } = buf;
     const { size, } = this;
-    return buf.subarray(size + 1, length);
+    return buf.subarray(size, length);
   }
 
   dealRedirectBuffer(buf) {
@@ -357,20 +357,25 @@ class DistribStorage extends Storage {
         const index = buf.indexOf(0);
         this.method = buf.subarray(0, index + 1).toString();
         const { length, } = buf;
-        this.dealRedirectBuffer(buf.subarray(index + 1, length));
         this.status = 1;
+        this.dealRedirectBuffer(buf.subarray(index + 1, length));
         break;
       }
       case 1: {
-        this.type = byteArray.toInt(buf.subarray(0, 1));
+        if (buf.toString() === 'end') {
+          this.state = 1;
+          this.dealBuffer();
+          break;
+        }
+        this.type = shiftOneByteArray.toInt(buf.subarray(0, 1));
         let { length, } = buf;
         buf = buf.subarray(1, length);
         const index = buf.indexOf(0);
-        this.size = shiftOneByteArray.toInt(buf.subarray(0, index + 1));
+        this.size = Number(shiftOneByteArray.toInt(buf.subarray(0, index)));
         length = buf.length;
         buf = buf.subarray(index + 1, length);
-        this.dealRedirectBuffer(buf);
         this.status = 2;
+        this.dealRedirectBuffer(buf);
         break;
       }
       case 2: {
@@ -380,6 +385,7 @@ class DistribStorage extends Storage {
             const { size, } = this;
             const string = buf.subarray(0, size).toString();
             this.params.push(string);
+            this.status = 1;
             this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
@@ -389,7 +395,8 @@ class DistribStorage extends Storage {
             const { length, } = buf;
             const object = JSON.parse(json);
             this.params.push(object);
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.status = 1;
+            //this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 2n: {
@@ -398,7 +405,8 @@ class DistribStorage extends Storage {
             const { length, } = buf;
             buf = buf.subarray(size + 1, length);
             this.params.push(int);
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.status = 1;
+            //this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 3n: {
@@ -406,7 +414,8 @@ class DistribStorage extends Storage {
             const bigInt = byteArray.toInt(buf.subarray(0, size));
             const { length, } = buf;
             this.params.push(bigInt);
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.status = 1;
+            //this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 4n: {
@@ -414,11 +423,11 @@ class DistribStorage extends Storage {
             const buffer = buf.subarray(0, size);
             const { length, } = buf;
             this.params.push(buffer);
+            this.status = 1;
             this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
         }
-        this.status = 1;
         break;
       }
     }
@@ -455,6 +464,7 @@ class DistribStorage extends Storage {
       }
       case 1: {
         const { method, params, request: connection, } = this;
+        break;
         if (method !== '') {
           switch (method) {
             case 'realpath': {
@@ -513,6 +523,10 @@ class DistribStorage extends Storage {
         this.state = 0;
         break;
       }
+      case 3:
+        this.status = 0;
+        this.dealRedirectBuffer(buf);
+        break;
     }
   }
 
