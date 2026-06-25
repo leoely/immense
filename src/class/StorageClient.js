@@ -16,7 +16,7 @@ class StorageClient {
     this.dealOptions();
     this.dealParams(allStorages);
     this.index = this.getRandomIndex();
-    this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
+    this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
   }
 
   getRandomIndex() {
@@ -66,6 +66,13 @@ class StorageClient {
     this.allStorages = allStorages;
   }
 
+  writeBufferLength(client, buffer) {
+    const { length, } = buffer;
+    const { shiftOneByteArray, } = this;
+    client.write(Buffer.from(shiftOneByteArray.fromInt(buffer.length)));
+    client.write(Buffer.from([0]));
+  }
+
   async callBigDataMethod(name, ...params) {
     const index = this.getNextIndex();
     const { allStorages, } = this;
@@ -109,45 +116,61 @@ class StorageClient {
         client.destroySoon();
       });
     });
-    const { byteArray, } = this;
+    const { shiftOneByteArray, } = this;
     const promises = sites.map(([ip, port]) => {
       return new Promise((resolve, reject) => {
         const client = net.createConnection(port, ip, async () => {
           client.write('redirect');
+          client.write(name);
+          client.write(Buffer.from([0]));
           params.forEach((param) => {
             switch (typeof param) {
               case 'string':
-                client.write(Buffer.from(byteArray.fromInt(0n)));
+                client.write(Buffer.from(shiftOneByteArray.fromInt(0n)));
+                client.write(Buffer.from([0]));
                 break;
               case 'object':
                 if (Buffer.isBuffer(param)) {
-                  client.write(Buffer.from(byteArray.fromInt(4n)));
+                  client.write(Buffer.from(shiftOneByteArray.fromInt(4n)));
                 } else {
-                  client.write(Buffer.from(byteArray.fromInt(1n)));
+                  client.write(Buffer.from(shiftOneByteArray.fromInt(1n)));
                 }
+                client.write(Buffer.from([0]));
                 break;
               case 'number':
-                client.write(Buffer.from(byteArray.fromInt(2n)));
+                client.write(Buffer.from(shiftOneByteArray.fromInt(2n)));
+                client.write(Buffer.from([0]));
                 break;
               case 'bigint':
-                client.write(Buffer.from(byteArray.fromInt(3n)));
+                client.write(Buffer.from(shiftOneByteArray.fromInt(3n)));
+                client.write(Buffer.from([0]));
                 break;
             }
             switch (typeof param) {
-              case 'string':
+              case 'string': {
+                const buffer = Buffer.from(param);
+                this.writeBufferLength(client, buffer);
                 client.write(Buffer.from(param));
                 break;
+              }
               case 'object':
                 if (Buffer.isBuffer(param)) {
+                  const buffer = param;
+                  this.writeBufferLength(client, buffer);
                   client.write(param);
                 } else {
-                  client.write(Buffer.from(JSON.stringify(param)));
+                  const buffer = Buffer.from(JSON.stringify(param));
+                  this.writeBufferLength(client, buffer);
+                  client.write(buffer);
                 }
                 break;
               case 'number':
-              case 'bigint':
-                client.write(Buffer.from(byteArray.fromInt(param)));
+              case 'bigint': {
+                const buffer = Buffer.from(shiftOneByteArray.fromInt(param));
+                writeBufferLength(client, buffer);
+                client.write();
                 break;
+              }
             }
             client.write(param);
           });
@@ -181,12 +204,12 @@ class StorageClient {
               //break;
             //}
             //case 'diskOccupy': {
-              //const bigInt = byteArray.toInt(buf);
+              //const bigInt = shiftOneByteArray.toInt(buf);
               //resolve(bigInt);
               //break;
             //}
             //case 'access': {
-              //const int = byteArray.toInt(buf);
+              //const int = shiftOneByteArray.toInt(buf);
               //switch (int) {
                 //case 0n:
                   //resolve(false);

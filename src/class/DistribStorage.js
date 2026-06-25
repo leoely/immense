@@ -7,55 +7,18 @@ import {
 } from 'manner.js/server';
 import Storage from '~/class/Storage';
 
-const nonZeroByteArray = new ByteArray({ size: 256n, shift: 1n, });
-
-function getBinBuf(params) {
-  if (!Array.isArray(params)) {
-    throw new Error('[Error] The params parameter should be an array type.');
-  }
-  const { length, } = params;
-  if (length !== 1 && length !== 4) {
-    throw new Error('[Error] The length of the params parameter should be equal to one or four.');
-  }
-  const pbytes = [];
-  params.forEach((param) => {
-    switch (typeof param) {
-      case 'boolean':
-        switch (param) {
-          case true:
-            pbytes.push(Array.from(nonZeroByteArray.fromInt(1)));
-            break;
-          case false:
-            pbytes.push(Array.from(nonZeroByteArray.fromInt(0)));
-            break;
-        }
-        break;
-      case 'string':
-        pbytes.push(Array.from(Buffer.from(param)));
-        break;
-      case 'number':
-        if (!Number.isInteger(param)) {
-          throw new Error('[Error] If the param type is a number, ite should be an integer.');
-        }
-        pbytes.push(Array.from(nonZeroByteArray.fromInt(param)));
-        break;
-    }
-    pbytes.push(0);
-  });
-  const buf = Buffer.from(pbytes.flat());
-  return buf;
-}
-
 class DistribStorage extends Storage {
   constructor(location, options, port, allStorages) {
     super(location, options);
     this.dealParams(port, allStorages);
     this.request = null;
     this.count = 0;
+    this.size = -1;
     this.state = 0;
     this.status = 0;
     this.params = [];
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
+    this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
     this.dealBuffer = this.dealBuffer.bind(this);
   }
 
@@ -113,7 +76,46 @@ class DistribStorage extends Storage {
     });
   }
 
+  getBinBuf(params) {
+    if (!Array.isArray(params)) {
+      throw new Error('[Error] The params parameter should be an array type.');
+    }
+    const { length, } = params;
+    if (length !== 1 && length !== 4) {
+      throw new Error('[Error] The length of the params parameter should be equal to one or four.');
+    }
+    const pbytes = [];
+    const { shiftOneByteArray, } = this;
+    params.forEach((param) => {
+      switch (typeof param) {
+        case 'boolean':
+          switch (param) {
+            case true:
+              pbytes.push(Array.from(shiftOneByteArray.fromInt(1)));
+              break;
+            case false:
+              pbytes.push(Array.from(shiftOneByteArray.fromInt(0)));
+              break;
+          }
+          break;
+        case 'string':
+          pbytes.push(Array.from(Buffer.from(param)));
+          break;
+        case 'number':
+          if (!Number.isInteger(param)) {
+            throw new Error('[Error] If the param type is a number, ite should be an integer.');
+          }
+          pbytes.push(Array.from(shiftOneByteArray.fromInt(param)));
+          break;
+      }
+      pbytes.push(0);
+    });
+    const buf = Buffer.from(pbytes.flat());
+    return buf;
+  }
+
   getResponsePromises(callback) {
+    const { shiftOneByteArray, } = this;
     if (typeof callback !== 'function') {
       throw new Error('[Error] Parameter callback should be a funciton type.');
     }
@@ -129,7 +131,7 @@ class DistribStorage extends Storage {
               s = i + 1;
             }
           }
-          const bigInt1 = nonZeroByteArray.toInt(segments.shift());
+          const bigInt1 = shiftOneByteArray.toInt(segments.shift());
           const code = Number(bigInt1);
           let params;
           switch (code) {
@@ -138,7 +140,7 @@ class DistribStorage extends Storage {
               params = segments.map((segment, index) => {
                 switch (index) {
                   case 0: {
-                    const bigInt2 = nonZeroByteArray.toInt(segment);
+                    const bigInt2 = shiftOneByteArray.toInt(segment);
                     switch (bigInt2) {
                       case 1n:
                         return true;
@@ -148,7 +150,7 @@ class DistribStorage extends Storage {
                     break;
                   }
                   case 2:
-                    return nonZeroByteArray.toInt(segment);
+                    return shiftOneByteArray.toInt(segment);
                   default:
                     return segment.toString();
                 }
@@ -159,7 +161,7 @@ class DistribStorage extends Storage {
                 switch (index) {
                   case 0:
                   case 2:
-                    return nonZeroByteArray.toInt(segment);
+                    return shiftOneByteArray.toInt(segment);
                   default:
                     return segment.toString();
                 }
@@ -317,9 +319,12 @@ class DistribStorage extends Storage {
             });
             this.connections.push(connection);
             this.count += 1;
-          } else if (count === length) {
-            this.setRequest(connection);
-            this.count += 1;
+          } else if (count >= length) {
+            const { request, } = this;
+            if (request === null) {
+              this.setRequest(connection);
+              this.count += 1;
+            }
           } else {
             connection.destroySoon();
           }
@@ -339,43 +344,77 @@ class DistribStorage extends Storage {
     }
   }
 
+  getRestBuffer(buf) {
+    const { length, } = buf;
+    const { size, } = this;
+    buf.subarray(size + 1, length);
+  }
+
   dealRedirectBuffer(buf) {
     const { status, byteArray, } = this;
     switch (status) {
-      case 1:
-        this.method = buf.toString();
+      case 1: {
+        const index = buf.indexOf(0);
+        this.method = buf.subarray(0, index + 1).toString();
+        const { length, } = buf;
+        this.dealRedirectBuffer(buf.subarray(index + 1, length));
         this.status = 0;
         break;
-      case 0:
-        this.type = byteArray.toInt(buf);
+      }
+      case 0: {
+        this.type = byteArray.toInt(buf.subarray(0, 1));
+        let { length, } = buf;
+        buf = buf.subarray(1, length);
+        const index = buf.indexOf(0);
+        this.size = shiftOneByteArray.toInt(buf.subarray(0, index + 1));
+        length = buf.length;
+        buf = buf.subarray(index + 1, length);
+        this.dealRedirectBuffer(buf);
         this.status = 2;
         break;
+      }
       case 1: {
-        const { type, } = this;
+        const { size, type, } = this;
         switch (type) {
           case 0n: {
-            const string = buf.toString();
+            const { size, } = this;
+            const string = buf.subarray(0, size).toString();
             this.params.push(string);
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 1n: {
-            const object = JSON.parse(buf.toString());
+            const { size, } = this;
+            const json = buf.subarray(0, size).toString();
+            const { length, } = buf;
+            const object = JSON.parse(json);
             this.params.push(object);
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 2n: {
-            const int = Number(byteArray.toInt(buf));
+            const { size, } = this;
+            const int = Number(byteArray.toInt(buf.subarray(0, size)));
+            const { length, } = buf;
+            buf = buf.subarray(size + 1, length);
             this.params.push(int);
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 3n: {
-            const bigInt = byteArray.toInt(buf);
+            const { size, } = this;
+            const bigInt = byteArray.toInt(buf.subarray(0, size));
+            const { length, } = buf;
             this.params.push(bigInt);
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 4n: {
-            const buffer = buf;
+            const { size, } = this;
+            const buffer = buf.subarray(0, size);
+            const { length, } = buf;
             this.params.push(buffer);
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
         }
@@ -405,14 +444,13 @@ class DistribStorage extends Storage {
           const { length, } = buf;
           buf = buf.subarray(7, length);
           this.state = 2;
-          this.dealBuffer(buf);
+          await this.dealBuffer(buf);
         } else if (buf.subarray(0, 3).toString() === 'end') {
           this.state = 1;
         } else if (buf.subarray(0, 8).toString() === 'redirect') {
-          console.log(111111);
           const { length, } = buf;
           buf = buf.subarray(8, length);
-          this.dealBuffer(buf);
+          await this.dealBuffer(buf);
           this.state = 3;
         }
         break;
@@ -472,6 +510,7 @@ class DistribStorage extends Storage {
         const string = JSON.stringify(sites);
         const { request: connection, } = this;
         connection.write(string);
+        this.request = null;
         this.method = '';
         this.params = [];
         this.state = 0;
@@ -527,18 +566,19 @@ class DistribStorage extends Storage {
         s = i + 1;
       }
     }
-    const bigInt1 = nonZeroByteArray.toInt(segments.shift());
+    const { shiftOneByteArray, } = this;
+    const bigInt1 = shiftOneByteArray.toInt(segments.shift());
     const code = Number(bigInt1);
     const { ip, port, } = this;
     switch (code) {
       case 0: {
         const exists = await this.exists();
-        connection.write(getBinBuf([0, exists, ip, port]));
+        connection.write(this.getBinBuf([0, exists, ip, port]));
         break;
       }
       case 1: {
         const available = await this.available();
-        connection.write(getBinBuf([1, available, ip, port]));
+        connection.write(this.getBinBuf([1, available, ip, port]));
         break;
       }
       default:
@@ -591,7 +631,7 @@ class DistribStorage extends Storage {
       this.checkCombine();
       const exists = await this.exists(place);
       const responsePromises = this.getResponsePromises((client) => {
-        client.write(getBinBuf([0]));
+        client.write(this.getBinBuf([0]));
       });
       const existsMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -607,7 +647,7 @@ class DistribStorage extends Storage {
       this.checkCombine();
       const available = await this.available(place);
       const responsePromises = this.getResponsePromises((client) => {
-        client.write(getBinBuf([1]));
+        client.write(this.getBinBuf([1]));
       });
       const availableMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -623,7 +663,7 @@ class DistribStorage extends Storage {
       this.checkCombine();
       const presence = await this.presence(place);
       const responsePromises = this.getResponsePromises((client) => {
-        client.write(getBinBuf([2]));
+        client.write(this.getBinBuf([2]));
       });
       const presenceMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -634,12 +674,12 @@ class DistribStorage extends Storage {
     }
   }
 
-  async checkDontExistsDistrib(place) {
+  async treatDontExistsDistrib(place) {
     const existsResults = await existsDistrib(place);
     return existsResults.every(([exists, ip, port]) => exists === false);
   }
 
-  async checkDontPresenceDistrib(place) {
+  async treatDontPresenceDistrib(place) {
     const presenceResults = await presencejDistrib(place);
     return presenceResults.every(([exists, ip, port]) => presence === false);
   }
