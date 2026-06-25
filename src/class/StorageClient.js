@@ -174,7 +174,6 @@ class StorageClient {
             }
             client.write(param);
           });
-          resolve();
           //client.write(Buffer.from('end'));
           //const buffer = await dataPromise(client);
           //switch (method) {

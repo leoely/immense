@@ -347,21 +347,21 @@ class DistribStorage extends Storage {
   getRestBuffer(buf) {
     const { length, } = buf;
     const { size, } = this;
-    buf.subarray(size + 1, length);
+    return buf.subarray(size + 1, length);
   }
 
   dealRedirectBuffer(buf) {
-    const { status, byteArray, } = this;
+    const { status, byteArray, shiftOneByteArray, } = this;
     switch (status) {
-      case 1: {
+      case 0: {
         const index = buf.indexOf(0);
         this.method = buf.subarray(0, index + 1).toString();
         const { length, } = buf;
         this.dealRedirectBuffer(buf.subarray(index + 1, length));
-        this.status = 0;
+        this.status = 1;
         break;
       }
-      case 0: {
+      case 1: {
         this.type = byteArray.toInt(buf.subarray(0, 1));
         let { length, } = buf;
         buf = buf.subarray(1, length);
@@ -373,7 +373,7 @@ class DistribStorage extends Storage {
         this.status = 2;
         break;
       }
-      case 1: {
+      case 2: {
         const { size, type, } = this;
         switch (type) {
           case 0n: {
@@ -445,18 +445,15 @@ class DistribStorage extends Storage {
           buf = buf.subarray(7, length);
           this.state = 2;
           await this.dealBuffer(buf);
-        } else if (buf.subarray(0, 3).toString() === 'end') {
-          this.state = 1;
         } else if (buf.subarray(0, 8).toString() === 'redirect') {
           const { length, } = buf;
           buf = buf.subarray(8, length);
-          await this.dealBuffer(buf);
           this.state = 3;
+          await this.dealBuffer(buf);
         }
         break;
       }
       case 1: {
-        this.dealRedirectBuffer(buf);
         const { method, params, request: connection, } = this;
         if (method !== '') {
           switch (method) {
@@ -516,9 +513,6 @@ class DistribStorage extends Storage {
         this.state = 0;
         break;
       }
-      case 3:
-        this.dealRedirectBuffer(buf);
-        break;
     }
   }
 
