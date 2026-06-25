@@ -409,6 +409,10 @@ class DistribStorage extends Storage {
         } else if (buf.subarray(0, 3).toString() === 'end') {
           this.state = 1;
         } else if (buf.subarray(0, 8).toString() === 'redirect') {
+          console.log(111111);
+          const { length, } = buf;
+          buf = buf.subarray(8, length);
+          this.dealBuffer(buf);
           this.state = 3;
         }
         break;

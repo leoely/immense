@@ -1,5 +1,7 @@
 import net from 'net';
-import detect from 'detect-port';
+import {
+  ByteArray,
+} from 'manner.js/server';
 import dataPromise from '~/lib/util/dataPromise';
 
 class StorageClient {
@@ -14,6 +16,7 @@ class StorageClient {
     this.dealOptions();
     this.dealParams(allStorages);
     this.index = this.getRandomIndex();
+    this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
   }
 
   getRandomIndex() {
@@ -72,8 +75,32 @@ class StorageClient {
         client.write('distrib');
         client.write(name);
         switch (name) {
+          case 'realpath':
+          case 'access':
+          case 'chown':
+          case 'chmod':
+          case 'stats':
+          case 'writeBuffer':
+          case 'writeBufferPiece':
+          case 'readBufferPiece':
+          case 'appendData':
+          case 'remove':
+          case 'truncate':
+          case 'readData':
           case 'addBuffer':
+          case 'diskOccupy':
+          case 'mkdir':
+          case 'rmdir':
+          case 'readdir':
             client.write(JSON.stringify(params.slice(0, 1)));
+            break;
+          case 'cp':
+          case 'link':
+          case 'rename':
+            client.write(JSON.stringify(params.slice(0, 2)));
+            break;
+          case 'glob':
+            client.write(JSON.stringify([]));
             break;
         }
         const buffer = await dataPromise(client);
@@ -82,31 +109,49 @@ class StorageClient {
         client.destroySoon();
       });
     });
-    //const promises = sites.map(([ip, port]) => {
-      //return new Promise((resolve, reject) => {
-        //const client = net.createConnection(port, ip, async () => {
-          //client.write('redirect');
-          //params.forEach((param) => {
-            //switch (typeof param) {
-              //case 'string':
-                //client.write(byteArray.fromInt(0n));
-                //break;
-              //case 'object':
-                //if (Buffer.isBuffer(param)) {
-                  //client.write(byteArray.fromInt(4n));
-                //} else {
-                  //client.write(byteArray.fromInt(1n));
-                //}
-                //break;
-              //case 'number':
-                //client.write(byteArray.fromInt(2n));
-                //break;
-              //case 'bigint':
-                //client.write(byteArray.fromInt(3n));
-                //break;
-            //}
-            //client.write(param);
-          //});
+    const { byteArray, } = this;
+    const promises = sites.map(([ip, port]) => {
+      return new Promise((resolve, reject) => {
+        const client = net.createConnection(port, ip, async () => {
+          client.write('redirect');
+          params.forEach((param) => {
+            switch (typeof param) {
+              case 'string':
+                client.write(Buffer.from(byteArray.fromInt(0n)));
+                break;
+              case 'object':
+                if (Buffer.isBuffer(param)) {
+                  client.write(Buffer.from(byteArray.fromInt(4n)));
+                } else {
+                  client.write(Buffer.from(byteArray.fromInt(1n)));
+                }
+                break;
+              case 'number':
+                client.write(Buffer.from(byteArray.fromInt(2n)));
+                break;
+              case 'bigint':
+                client.write(Buffer.from(byteArray.fromInt(3n)));
+                break;
+            }
+            switch (typeof param) {
+              case 'string':
+                client.write(Buffer.from(param));
+                break;
+              case 'object':
+                if (Buffer.isBuffer(param)) {
+                  client.write(param);
+                } else {
+                  client.write(Buffer.from(JSON.stringify(param)));
+                }
+                break;
+              case 'number':
+              case 'bigint':
+                client.write(Buffer.from(byteArray.fromInt(param)));
+                break;
+            }
+            client.write(param);
+          });
+          resolve();
           //client.write(Buffer.from('end'));
           //const buffer = await dataPromise(client);
           //switch (method) {
@@ -154,23 +199,23 @@ class StorageClient {
             //default:
               //resolve();
           //}
-          //client.destorySoon();
-        //});
-      //});
-    //});
-    //const returns = await Promise.all(promises);
-    //const { length, } = returns;
-    //switch (name) {
-      //case 'glob': {
-        //let paths = [];
-        //returns.forEach((r) => {
-          //paths = paths.concat(r);
-        //});
-        //break;
-      //}
-      //default:
-        //return returns[0];
-    //}
+          client.destroySoon();
+        });
+      });
+    });
+    const returns = await Promise.all(promises);
+    const { length, } = returns;
+    switch (name) {
+      case 'glob': {
+        let paths = [];
+        returns.forEach((r) => {
+          paths = paths.concat(r);
+        });
+        break;
+      }
+      default:
+        return returns[0];
+    }
   }
 
   async readData(place, options) {
