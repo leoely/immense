@@ -5,6 +5,7 @@ import disk from 'diskusage';
 import {
   ByteArray,
 } from 'manner.js/server';
+import ParameterError from '~/class/ParameterError';
 import existsPromise from '~/lib/util/existsPromise';
 import readPromise from '~/lib/util/readPromise';
 import writePromise from '~/lib/util/writePromise';
@@ -985,26 +986,26 @@ class Storage {
 
   async access(place, mod) {
     if (typeof place !== 'string') {
-      throw new Error('[Error] The parameter place should be of string type.');
+      throw new ParameterError('[Error] The parameter place should be of string type.');
     }
     if (!Number.isInteger(mod)) {
-      throw new Error('[Error] The parameter mod should be an integer.');
+      throw new ParameterError('[Error] The parameter mod should be an integer.');
     }
     const { location, } = this;
     const filePath = path.join(location, place);
     const dirname = dealDirname(path.dirname(filePath));
     if (!checkMultipleHidden(dirname)) {
-      throw new Error('[Error] Cannot operate hidden directorys.');
+      throw new ParameterError('[Error] Cannot operate hidden directorys.');
     }
     const basename = path.basename(filePath);
     if (!checkSingleHidden(basename)) {
-      throw new Error('[Error] Cannot operate hidden files.');
+      throw new ParameterError('[Error] Cannot operate hidden files.');
     }
     if (!(path.extname(filePath).length >= 1)) {
-      throw new Error('[Error] The file you are working with needs to have its file extension specified.');
+      throw new ParameterError('[Error] The file you are working with needs to have its file extension specified.');
     }
     if (!await existsPromise(filePath)) {
-      throw new Error('[Error] The file being access does not exist.');
+      throw new ParameterError('[Error] The file being access does not exist.');
     }
     await fsPromises.access(filePath, mod);
   }

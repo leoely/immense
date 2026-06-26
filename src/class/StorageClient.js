@@ -15,6 +15,7 @@ class StorageClient {
     this.dealOptions();
     this.dealParams(allStorages);
     this.index = this.getRandomIndex();
+    this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
   }
 
@@ -161,51 +162,58 @@ class StorageClient {
             }
           });
           client.write('end');
-          const buffer = await dataPromise(client);
-          switch (name) {
-            case 'realpath': {
-              resolve(buffer.toString());
-              break;
-            }
-            case 'readData': {
-              const options = params[1];
-              if (typeof options === 'object') {
-                const { encoding, } = options;
-                if (typeof encoding === 'string' && encoding.length > 0) {
-                  resolve(buffer.toString());
+          let buffer = await dataPromise(client);
+          const code = ByteArray.toInt(buffer.subarray(0, 1));
+          const { length, } = buffer;
+          buffer = buffer.subarray(1, length);
+          if (code === 0) {
+            throw new Error(buffer.toString());
+          } else {
+            switch (name) {
+              case 'realpath': {
+                resolve(buffer.toString());
+                break;
+              }
+              case 'readData': {
+                const options = params[1];
+                if (typeof options === 'object') {
+                  const { encoding, } = options;
+                  if (typeof encoding === 'string' && encoding.length > 0) {
+                    resolve(buffer.toString());
+                  }
+                }
+                resolve(buffer);
+                break;
+              }
+              case 'readBufferPiece': {
+                resolve(buffer);
+                break;
+              }
+              case 'glob':
+              case 'readdir':
+              case 'stats': {
+                resolve(JSON.stringify(buf.toString()));
+                break;
+              }
+              case 'diskOccupy': {
+                const bigInt = shiftOneByteArray.toInt(buffer);
+                resolve(bigInt);
+                break;
+              }
+              case 'access': {
+                const int = shiftOneByteArray.toInt(buffer);
+                switch (int) {
+                  case 0n:
+                    resolve(false);
+                    break;
+                  case 1n:
+                    resolve(true);
+                    break;
                 }
               }
-              resolve(buffer);
-              break;
+              default:
+                resolve(undefined);
             }
-            case 'readBufferPiece': {
-              resolve(buffer);
-              break;
-            }
-            case 'glob':
-            case 'readdir':
-            case 'stats': {
-              resolve(JSON.stringify(buf.toString()));
-              break;
-            }
-            case 'diskOccupy': {
-              const bigInt = shiftOneByteArray.toInt(buffer);
-              resolve(bigInt);
-              break;
-            }
-            case 'access': {
-              const int = shiftOneByteArray.toInt(buffer);
-              switch (int) {
-                case 0n:
-                  resolve(false);
-                  break;
-                case 1n:
-                  resolve(true);
-                  break;
-              }
-            }
-            default:
-              resolve(undefined);
           }
           client.destroySoon();
         });

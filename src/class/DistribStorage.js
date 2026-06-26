@@ -447,6 +447,19 @@ class DistribStorage extends Storage {
     return sites;
   }
 
+  dealError(callback) {
+    const { request: connection, } = this;
+    callback.bind(this);
+    try {
+      data = callback();
+      connection.write(Buffer.from[1]);
+      connection.write(data);
+    } catch (error) {
+      connection.write(Buffer.from[0]);
+      connection.write(error.message);
+    }
+  }
+
   async dealBuffer(buf) {
     const { state, } = this;
     switch (state) {
@@ -470,40 +483,58 @@ class DistribStorage extends Storage {
           const { length, } = method;
           switch (method) {
             case 'realpath': {
-              const string = await this[method](...params);
-              connection.write(string);
+              this.dealError(async () => {
+                return await this[method](...params);
+              });
               break;
             }
             case 'readData':
             case 'readBufferPiece': {
-              const buffer = await this[method](...params);
-              connection.write(buffer);
+              this.dealError(async () => {
+                return await this[method](...params);
+              });
               break;
             }
             case 'glob':
             case 'readdir':
             case 'stats': {
-              const stats = await this[method](...params);
-              const json = JSON.stringify(stats);
-              connection.write(json);
+              this.dealError(async () => {
+                const stats = await this[method](...params);
+                return JSON.stringify(stats);
+              });
               break;
             }
             case 'diskOccupy': {
-              const bigInt = await this[method](...params);
-              connection.write(byteArray.fromInt(bigInt));
+              this.dealError(async () => {
+                const bigInt = await this[method](...params);
+                return byteArray.fromInt(bigInt);
+              });
               break;
             }
             case 'access':
               try {
                 await this[method](...params);
+                connection.write(Buffer.from([1]));
                 connection.write(byteArray.fromInt(1));
               } catch (error) {
-                connection.write(byteArray.fromInt(0));
+                if (error instanceof ParameterError) {
+                  connection.write(Buffer.from([1]));
+                  connection.write(error.message);
+                } else {
+                  connection.write(Buffer.from([1]));
+                  connection.write(byteArray.fromInt(0));
+                }
               }
               break;
             default:
-              await this[method](...params);
-              connection.write('u');
+              try {
+                await this[method](...params);
+                connection.write(Buffer.from([1]));
+                connection.write('u');
+              } catch (error) {
+                connection.write(Buffer.from[0]);
+                connection.write(error.message);
+              }
           }
         }
         this.request = null;
