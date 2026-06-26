@@ -163,7 +163,8 @@ class StorageClient {
           });
           client.write('end');
           let buffer = await dataPromise(client);
-          const code = ByteArray.toInt(buffer.subarray(0, 1));
+          const { byteArray, } = this;
+          const code = byteArray.toInt(buffer.subarray(0, 1));
           const { length, } = buffer;
           buffer = buffer.subarray(1, length);
           if (code === 0) {
@@ -236,14 +237,14 @@ class StorageClient {
 
   async readData(...params) {
     if (params.length !== 2) {
-      throw new Error('[Error] The parameter form should be: async readData(place, options);';)
+      throw new Error('[Error] The parameter form should be: async readData(place, options);');
     }
     return this.callRemoteMethod('readData', ...params);
   }
 
   async readBufferPiece(place, position, length) {
     if (params.length !== 3) {
-      throw new Error('[Error] The parameter form should be: async readBufferPiece(place, position, length);')
+      throw new Error('[Error] The parameter form should be: async readBufferPiece(place, position, length);');
     }
     return this.callRemoteMethod('readBufferPiece', ...params);
   }

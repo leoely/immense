@@ -6,6 +6,7 @@ import {
   appendToLog,
 } from 'manner.js/server';
 import Storage from '~/class/Storage';
+import ParameterError from '~/class/ParameterError';
 
 class DistribStorage extends Storage {
   constructor(location, options, port, allStorages) {
