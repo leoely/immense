@@ -10,7 +10,6 @@ class StorageClient {
       throw new Error('[Error] The parameter options should be of type object.');
     }
     const defaultOptions = {
-      port: 49152,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
@@ -49,14 +48,6 @@ class StorageClient {
         port,
       },
     } = this;
-    if (port !== undefined) {
-      if (!Number.isInteger(port)) {
-        throw new Error('[Error] The parameter port should be of integer type.');
-      }
-      if (port < 49152 || port > 65535) {
-        throw new Error('[Error] The range of parameter port should be [49152, 65535].')
-      }
-    }
   }
 
   dealParams(allStorages) {
@@ -73,7 +64,7 @@ class StorageClient {
     client.write(Buffer.from([0]));
   }
 
-  async callBigDataMethod(name, ...params) {
+  async callRemoteMethod(name, ...params) {
     const index = this.getNextIndex();
     const { allStorages, } = this;
     const [ip, port] = allStorages[index];
@@ -235,71 +226,151 @@ class StorageClient {
     }
   }
 
-  async readData(place, options) {
+  async readData(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async readData(place, options);';)
+    }
+    return this.callRemoteMethod('readData', ...params);
   }
 
   async readBufferPiece(place, position, length) {
+    if (params.length !== 3) {
+      throw new Error('[Error] The parameter form should be: async readBufferPiece(place, position, length);')
+    }
+    return this.callRemoteMethod('readBufferPiece', ...params);
   }
 
-  async writeBufferPiece(place, position, buffer) {
-    return this.callBigDataMethod('writeBufferPiece', ...params);
+  async writeBufferPiece(...params) {
+    if (params.length !== 3) {
+      throw new Error('[Error] The parameter form should be: async writeBufferPiece(place, position, buffer);');
+    }
+    return this.callRemoteMethod('writeBufferPiece', ...params);
   }
 
   async writeBuffer(...params) {
-    return this.callBigDataMethod('writeBuffer', ...params);
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async writeBuffer(place, buffer);');
+    }
+    return this.callRemoteMethod('writeBuffer', ...params);
   }
 
   async addBuffer(...params) {
-    return this.callBigDataMethod('addBuffer', ...params);
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async addBuffer(place, buffer);');
+    }
+    return this.callRemoteMethod('addBuffer', ...params);
   }
 
   async appendData(...params) {
-    return this.callBigDataMethod('appendData', ...params);
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async appendData(place, data);');
+    }
+    return this.callRemoteMethod('appendData', ...params);
   }
 
-  async remove(place) {
+  async remove(...params) {
+    if (params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async remove(place);');
+    }
+    return this.callRemoteMethod('remove', ...params);
   }
 
-  async truncate(place, length) {
+  async truncate(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async truncate(place, length);');
+    }
+    return this.callRemoteMethod('truncate', ...params);
   }
 
-  async rename(oldPlace, newPlace) {
+  async rename(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async rename(oldPlace, newPlace);')
+    }
+    return this.callRemoteMethod('rename', ...params);
   }
 
-  async diskOccupy(place) {
+  async diskOccupy(...params) {
+    if (params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async diskOccupy(place);')
+    }
+    return this.callRemoteMethod('diskOccupy', ...params);
   }
 
-  async cp(srcPath, destPath, options) {
+  async cp(...params) {
+    if (params.length !== 3) {
+      throw new Error('[Error] The parameter form should be: async cp(srcPath, destPath, options);');
+    }
+    return this.callRemoteMethod('cp', ...params);
   }
 
-  async link(targetPlace, linkPlace) {
+  async link(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async link(targetPlace, linkPlace);');
+    }
+    return this.callRemoteMethod('link', ...params);
   }
 
-  async stats(place) {
+  async stats(...params) {
+    if (params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async stats(place);');
+    }
+    return this.callRemoteMethod('stats', ...params);
   }
 
-  async chmod(place, mod) {
+  async chmod(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async chmod(place, mod);');
+    }
+    return this.callRemoteMethod('chmod', ...params);
   }
 
-  async chown(place, uid, gid) {
+  async chown(...params) {
+    if (params.length !== 3) {
+      throw new Error('[Error] The parameter form should be: async chown(place, uid, gid);');
+    }
+    return this.callRemoteMethod('chown', ...params);
   }
 
-  async access(place, mod) {
+  async access(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async access(place, mod);');
+    }
+    return this.callRemoteMethod('access', ...params);
   }
 
-  async realpath(place) {
+  async realpath(...params) {
+    if (params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async realpath(place);');
+    }
+    return this.callRemoteMethod('realpath', ...params);
   }
 
-  async readdir(directory, options) {
+  async readdir(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async readdir(directory, options);');
+    }
+    return this.callRemoteMethod('readdir', ...params);
   }
 
-  async mkdir(directory) {
+  async mkdir(...params) {
+    if (params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async mkdir(directory);');
+    }
+    return this.callRemoteMethod('mkdir', ...params);
   }
 
-  async rmdir(directory) {
+  async rmdir(...params) {
+    if (params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async rmdir(directory) ;');
+    }
+    return this.callRemoteMethod('rmdir', ...params);
   }
 
-  async glob(pattern, options) {
+  async glob(...params) {
+    if (params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async glob(pattern, options);');
+    }
+    return this.callRemoteMethod('glob', ...params);
   }
 }
 
