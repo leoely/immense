@@ -99,7 +99,7 @@ class DistribStorage extends Storage {
           }
           break;
         case 'string':
-          pbytes.push(Array.from(Buffer.from(param)));
+          pbytes.push(Array.from(param));
           break;
         case 'number':
           if (!Number.isInteger(param)) {
@@ -324,9 +324,9 @@ class DistribStorage extends Storage {
             if (request === null) {
               this.setRequest(connection);
               this.count += 1;
+            } else {
+              connection.destroySoon();
             }
-          } else {
-            connection.destroySoon();
           }
         });
         const { port, } = this;
@@ -356,6 +356,8 @@ class DistribStorage extends Storage {
       case 0: {
         const index = buf.indexOf(0);
         this.method = buf.subarray(0, index + 1).toString();
+        const { method, } = this;
+        this.method = method.substring(0, method.length - 1);
         const { length, } = buf;
         this.status = 1;
         this.dealRedirectBuffer(buf.subarray(index + 1, length));
@@ -396,7 +398,7 @@ class DistribStorage extends Storage {
             const object = JSON.parse(json);
             this.params.push(object);
             this.status = 1;
-            //this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 2n: {
@@ -406,7 +408,7 @@ class DistribStorage extends Storage {
             buf = buf.subarray(size + 1, length);
             this.params.push(int);
             this.status = 1;
-            //this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 3n: {
@@ -415,7 +417,7 @@ class DistribStorage extends Storage {
             const { length, } = buf;
             this.params.push(bigInt);
             this.status = 1;
-            //this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buf));
             break;
           }
           case 4n: {
@@ -463,9 +465,9 @@ class DistribStorage extends Storage {
         break;
       }
       case 1: {
-        const { method, params, request: connection, } = this;
-        break;
+        let { method, params, request: connection, } = this;
         if (method !== '') {
+          const { length, } = method;
           switch (method) {
             case 'realpath': {
               const string = await this[method](...params);
@@ -501,15 +503,16 @@ class DistribStorage extends Storage {
               break;
             default:
               await this[method](...params);
+              connection.write('u');
           }
         }
+        this.request = null;
         this.status = 0;
         this.params = [];
         this.type = '';
         this.method = '';
         this.state = 0;
         this.count -= 1;
-        connection.destorySoon();
         break;
       }
       case 2: {
@@ -521,6 +524,7 @@ class DistribStorage extends Storage {
         this.method = '';
         this.params = [];
         this.state = 0;
+        this.count -= 1;
         break;
       }
       case 3:
@@ -533,9 +537,6 @@ class DistribStorage extends Storage {
   setRequest(connection) {
     this.request = connection;
     connection.on('data', this.dealBuffer);
-    connection.on('close', () => {
-      this.request = null;
-    });
     connection.on('error', (error) => {
       this.request = null;
     });

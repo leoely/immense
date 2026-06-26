@@ -144,7 +144,7 @@ class StorageClient {
             }
             switch (typeof param) {
               case 'string': {
-                const buffer = Buffer.from(param);
+                const buffer = param;
                 this.writeBufferLength(client, buffer);
                 client.write(buffer);
                 break;
@@ -155,7 +155,7 @@ class StorageClient {
                   this.writeBufferLength(client, buffer);
                   client.write(param);
                 } else {
-                  const buffer = Buffer.from(JSON.stringify(param));
+                  const buffer =JSON.stringify(param);
                   this.writeBufferLength(client, buffer);
                   client.write(buffer);
                 }
@@ -169,53 +169,53 @@ class StorageClient {
               }
             }
           });
-          client.write(Buffer.from('end'));
-          //const buffer = await dataPromise(client);
-          //switch (method) {
-            //case 'realpath': {
-              //resolve(buf.toString());
-              //break;
-            //}
-            //case 'readData': {
-              //const options = params[1];
-              //if (typeof options === 'object') {
-                //const { encoding, } = options;
-                //if (typeof encoding === 'string' && encoding.length > 0) {
-                  //resolve(buffer.toString());
-                //}
-              //}
-              //resolve(buffer);
-              //break;
-            //}
-            //case 'readBufferPiece': {
-              //resolve(buffer);
-              //break;
-            //}
-            //case 'glob':
-            //case 'readdir':
-            //case 'stats': {
-              //resolve(JSON.stringify(buf.toString()));
-              //break;
-            //}
-            //case 'diskOccupy': {
-              //const bigInt = shiftOneByteArray.toInt(buf);
-              //resolve(bigInt);
-              //break;
-            //}
-            //case 'access': {
-              //const int = shiftOneByteArray.toInt(buf);
-              //switch (int) {
-                //case 0n:
-                  //resolve(false);
-                  //break;
-                //case 1n:
-                  //resolve(true);
-                  //break;
-              //}
-            //}
-            //default:
-              //resolve();
-          //}
+          client.write('end');
+          const buffer = await dataPromise(client);
+          switch (name) {
+            case 'realpath': {
+              resolve(buffer.toString());
+              break;
+            }
+            case 'readData': {
+              const options = params[1];
+              if (typeof options === 'object') {
+                const { encoding, } = options;
+                if (typeof encoding === 'string' && encoding.length > 0) {
+                  resolve(buffer.toString());
+                }
+              }
+              resolve(buffer);
+              break;
+            }
+            case 'readBufferPiece': {
+              resolve(buffer);
+              break;
+            }
+            case 'glob':
+            case 'readdir':
+            case 'stats': {
+              resolve(JSON.stringify(buf.toString()));
+              break;
+            }
+            case 'diskOccupy': {
+              const bigInt = shiftOneByteArray.toInt(buffer);
+              resolve(bigInt);
+              break;
+            }
+            case 'access': {
+              const int = shiftOneByteArray.toInt(buffer);
+              switch (int) {
+                case 0n:
+                  resolve(false);
+                  break;
+                case 1n:
+                  resolve(true);
+                  break;
+              }
+            }
+            default:
+              resolve(undefined);
+          }
           client.destroySoon();
         });
       });

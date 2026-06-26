@@ -423,12 +423,12 @@ class Storage {
       },
     } = this;
     if (acquireAvailableDelta === true) {
-      this.beforeAvailable = this.getAvailable();
+      this.beforeAvailable = this.available();
     }
     await callback();
     if (acquireAvailableDelta === true) {
-      const { beforeAvaiable, } = this;
-      return beforeAvailable - this.getAvailable();
+      const { beforeAvailable, } = this;
+      return beforeAvailable - this.available();
     } else {
       return -1;
     }
