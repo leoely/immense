@@ -115,7 +115,7 @@ class StorageClient {
     } else {
       throw new Error(content);
     }
-    const { shiftOneByteArray, } = this;
+    const { byteArray, shiftOneByteArray, } = this;
     const promises = sites.map(([ip, port]) => {
       return new Promise((resolve, reject) => {
         const client = net.createConnection(port, ip, async () => {
@@ -161,7 +161,7 @@ class StorageClient {
                 break;
               case 'number':
               case 'bigint': {
-                const buffer = Buffer.from(shiftOneByteArray.fromInt(param));
+                const buffer = Buffer.from(byteArray.fromInt(param));
                 this.writeBufferLength(client, buffer);
                 client.write(buffer);
                 break;
@@ -170,7 +170,6 @@ class StorageClient {
           });
           client.write('end');
           let buffer = await dataPromise(client);
-          const { byteArray, } = this;
           const code = byteArray.toInt(buffer.subarray(0, 1));
           const { length, } = buffer;
           buffer = buffer.subarray(1, length);
@@ -188,6 +187,8 @@ class StorageClient {
                   const { encoding, } = options;
                   if (typeof encoding === 'string' && encoding.length > 0) {
                     resolve(buffer.toString());
+                  } else {
+                    resolve(buffer);
                   }
                 }
                 resolve(buffer);
@@ -246,147 +247,147 @@ class StorageClient {
     if (params.length !== 2 && params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async readData(place, options);');
     }
-    return this.callRemoteMethod('readData', ...params);
+    return await this.callRemoteMethod('readData', ...params);
   }
 
-  async readBufferPiece(place, position, length) {
+  async readBufferPiece(...params) {
     if (params.length !== 3) {
       throw new Error('[Error] The parameter form should be: async readBufferPiece(place, position, length);');
     }
-    return this.callRemoteMethod('readBufferPiece', ...params);
+    return await this.callRemoteMethod('readBufferPiece', ...params);
   }
 
   async writeBufferPiece(...params) {
     if (params.length !== 3) {
       throw new Error('[Error] The parameter form should be: async writeBufferPiece(place, position, buffer);');
     }
-    return this.callRemoteMethod('writeBufferPiece', ...params);
+    return await this.callRemoteMethod('writeBufferPiece', ...params);
   }
 
   async writeBuffer(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async writeBuffer(place, buffer);');
     }
-    return this.callRemoteMethod('writeBuffer', ...params);
+    return await this.callRemoteMethod('writeBuffer', ...params);
   }
 
   async addBuffer(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async addBuffer(place, buffer);');
     }
-    return this.callRemoteMethod('addBuffer', ...params);
+    return await this.callRemoteMethod('addBuffer', ...params);
   }
 
   async appendData(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async appendData(place, data);');
     }
-    return this.callRemoteMethod('appendData', ...params);
+    return await this.callRemoteMethod('appendData', ...params);
   }
 
   async remove(...params) {
     if (params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async remove(place);');
     }
-    return this.callRemoteMethod('remove', ...params);
+    return await this.callRemoteMethod('remove', ...params);
   }
 
   async truncate(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async truncate(place, length);');
     }
-    return this.callRemoteMethod('truncate', ...params);
+    return await this.callRemoteMethod('truncate', ...params);
   }
 
   async rename(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async rename(oldPlace, newPlace);')
     }
-    return this.callRemoteMethod('rename', ...params);
+    return await this.callRemoteMethod('rename', ...params);
   }
 
   async diskOccupy(...params) {
     if (params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async diskOccupy(place);')
     }
-    return this.callRemoteMethod('diskOccupy', ...params);
+    return await this.callRemoteMethod('diskOccupy', ...params);
   }
 
   async cp(...params) {
     if (params.length !== 3 && params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async cp(srcPath, destPath, options);');
     }
-    return this.callRemoteMethod('cp', ...params);
+    return await this.callRemoteMethod('cp', ...params);
   }
 
   async link(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async link(targetPlace, linkPlace);');
     }
-    return this.callRemoteMethod('link', ...params);
+    return await this.callRemoteMethod('link', ...params);
   }
 
   async stats(...params) {
     if (params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async stats(place);');
     }
-    return this.callRemoteMethod('stats', ...params);
+    return await this.callRemoteMethod('stats', ...params);
   }
 
   async chmod(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async chmod(place, mod);');
     }
-    return this.callRemoteMethod('chmod', ...params);
+    return await this.callRemoteMethod('chmod', ...params);
   }
 
   async chown(...params) {
     if (params.length !== 3) {
       throw new Error('[Error] The parameter form should be: async chown(place, uid, gid);');
     }
-    return this.callRemoteMethod('chown', ...params);
+    return await kthis.callRemoteMethod('chown', ...params);
   }
 
   async access(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async access(place, mod);');
     }
-    return this.callRemoteMethod('access', ...params);
+    return await this.callRemoteMethod('access', ...params);
   }
 
   async realpath(...params) {
     if (params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async realpath(place);');
     }
-    return this.callRemoteMethod('realpath', ...params);
+    return await this.callRemoteMethod('realpath', ...params);
   }
 
   async readdir(...params) {
     if (params.length !== 2 && params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async readdir(directory, options);');
     }
-    return this.callRemoteMethod('readdir', ...params);
+    return await this.callRemoteMethod('readdir', ...params);
   }
 
   async mkdir(...params) {
     if (params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async mkdir(directory);');
     }
-    return this.callRemoteMethod('mkdir', ...params);
+    return await this.callRemoteMethod('mkdir', ...params);
   }
 
   async rmdir(...params) {
     if (params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async rmdir(directory) ;');
     }
-    return this.callRemoteMethod('rmdir', ...params);
+    return await this.callRemoteMethod('rmdir', ...params);
   }
 
   async glob(...params) {
     if (params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async glob(pattern, options);');
     }
-    return this.callRemoteMethod('glob', ...params);
+    return await this.callRemoteMethod('glob', ...params);
   }
 }
 
