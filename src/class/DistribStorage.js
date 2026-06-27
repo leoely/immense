@@ -532,7 +532,7 @@ class DistribStorage extends Storage {
                 connection.write(Buffer.from([1]));
                 connection.write('u');
               } catch (error) {
-                connection.write(Buffer.from[0]);
+                connection.write(Buffer.from([0]));
                 connection.write(error.message);
               }
           }
@@ -811,7 +811,7 @@ class DistribStorage extends Storage {
       case 'link':
       case 'rename': {
         const [place1, place2] = params;
-        site = await treatAvaibleDistrib(place);
+        site = await this.treatAvailableDistrib(place1);
         sites.push(site);
         const dontExists = await this.treatDontExistsDistrib(place2);
         if (dontExists !== true) {
@@ -831,7 +831,7 @@ class DistribStorage extends Storage {
       }
       case 'cp': {
         const [directory1, directory] = params;
-        site = await treatAvaibleDistrib(directory1);
+        site = await this.treatAvaibleDistrib(directory1);
         sites.push(site);
         const dontExists = await this.treatDontPresenceDistrib(directory2);
         if (dontExists !== true) {

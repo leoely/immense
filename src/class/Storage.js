@@ -424,12 +424,13 @@ class Storage {
       },
     } = this;
     if (acquireAvailableDelta === true) {
-      this.beforeAvailable = this.available();
+      this.beforeAvailable = await this.available();
     }
     await callback();
     if (acquireAvailableDelta === true) {
       const { beforeAvailable, } = this;
-      return beforeAvailable - this.available();
+      const afterAvailable = await this.available();
+      return beforeAvailable - afterAvailable;
     } else {
       return -1;
     }
@@ -565,7 +566,7 @@ class Storage {
       throw new Error('[Error] cannot operate hidden files.');
     }
     const availableDelta = await this.acquireAvailableDelta(async () => {
-      const fd = await openPromise(filePath, 'a');
+      const fd = await openPromise(filePath, 'w');
       await writePromise(fd, buffer);
       await fsyncPromise(fd);
       await closePromise(fd);
