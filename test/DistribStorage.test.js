@@ -55,6 +55,11 @@ describe('[Class] DistribStorage;', () => {
     const storageClient = new StorageClient({}, storages);
     await DistribStorage.combine([distribStorage1, distribStorage2]);
     await storageClient.addBuffer('test-bigdata-operation/operation.txt', Buffer.from('perform big data related operations.'));
+    let data = await storageClient.readData('test-bigdata-operation/operation.txt');
+    //expect(data).toMatch('fadsfasfsadf');
+    //let buffer = await storageClient.readBufferPiece('test-bigdata-operation/operation.txt', 2, 5);
+    //expect(data).toMatch('fadsawsfasdf');
+    //await storageClient.remove('test-bigdata-operation/operation.txt');
     await DistribStorage.release([distribStorage1, distribStorage2]);
   });
 });

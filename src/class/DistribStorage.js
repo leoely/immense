@@ -548,10 +548,13 @@ class DistribStorage extends Storage {
         break;
       }
       case 2: {
-        const sites = await this.dealDistribBuffer(buf);
-        const string = JSON.stringify(sites);
         const { request: connection, } = this;
-        connection.write(string);
+        try {
+          const sites = await this.dealDistribBuffer(buf);
+          connection.write(JSON.stringify([1, sites]));
+        } catch (error) {
+          connection.write(JSON.stringify([0, error.message]));
+        }
         this.request = null;
         this.method = '';
         this.params = [];
@@ -672,7 +675,7 @@ class DistribStorage extends Storage {
       this.checkCombine();
       const exists = await this.exists(place);
       const responsePromises = this.getResponsePromises((client) => {
-        client.write(this.getBinBuf([0]));
+        client.write(this.getBinBuf([0, place]));
       });
       const existsMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -688,7 +691,7 @@ class DistribStorage extends Storage {
       this.checkCombine();
       const available = await this.available(place);
       const responsePromises = this.getResponsePromises((client) => {
-        client.write(this.getBinBuf([1]));
+        client.write(this.getBinBuf([1, place]));
       });
       const availableMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -704,7 +707,7 @@ class DistribStorage extends Storage {
       this.checkCombine();
       const presence = await this.presence(place);
       const responsePromises = this.getResponsePromises((client) => {
-        client.write(this.getBinBuf([2]));
+        client.write(this.getBinBuf([2, place]));
       });
       const presenceMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -716,17 +719,17 @@ class DistribStorage extends Storage {
   }
 
   async treatDontExistsDistrib(place) {
-    const existsResults = await existsDistrib(place);
+    const existsResults = await this.existsDistrib(place);
     return existsResults.every(([exists, ip, port]) => exists === false);
   }
 
   async treatDontPresenceDistrib(place) {
-    const presenceResults = await presencejDistrib(place);
+    const presenceResults = await this.presencejDistrib(place);
     return presenceResults.every(([exists, ip, port]) => presence === false);
   }
 
   async treatExistsDistrib(place) {
-    let existsResults = await existsDistrib(place);
+    let existsResults = await this.existsDistrib(place);
     existsResults = existsResults.filter(([exists, ip, port]) => exist === true);
     if (existsResults.length === 0) {
       throw new Error('[Error] The file to be operated on does not exist.');
@@ -735,12 +738,12 @@ class DistribStorage extends Storage {
       const [_, ip, port] = existsResult;
       return [ip, port];
     } else {
-      throw new Error('[Error] Multiple files exist please chk system data is correct.')
+      throw new Error('[Error] Multiple files exist please check system data is correct.')
     }
   }
 
   async treatPresenceDistrib(place) {
-    let presenceResults = await presenceDistrib(place);
+    let presenceResults = await this.presenceDistrib(place);
     presenceResults = presenceResults.filter(([presence, ip, port]) => presence === true);
     if (presenceResults.length === 0) {
       throw new Error('[Error] The directory to be operated on does not exist.');

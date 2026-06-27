@@ -69,7 +69,7 @@ class StorageClient {
     const index = this.getNextIndex();
     const { allStorages, } = this;
     const [ip, port] = allStorages[index];
-    const sites = await new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       const client = net.createConnection(port, ip, async () => {
         client.write('distrib');
         client.write(name);
@@ -108,6 +108,13 @@ class StorageClient {
         client.destroySoon();
       });
     });
+    const [status, content] = result;
+    let sites;
+    if (status === 1) {
+      sites = content;
+    } else {
+      throw new Error(content);
+    }
     const { shiftOneByteArray, } = this;
     const promises = sites.map(([ip, port]) => {
       return new Promise((resolve, reject) => {
@@ -236,7 +243,7 @@ class StorageClient {
   }
 
   async readData(...params) {
-    if (params.length !== 2) {
+    if (params.length !== 2 && params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async readData(place, options);');
     }
     return this.callRemoteMethod('readData', ...params);
@@ -306,7 +313,7 @@ class StorageClient {
   }
 
   async cp(...params) {
-    if (params.length !== 3) {
+    if (params.length !== 3 && params.length !== 2) {
       throw new Error('[Error] The parameter form should be: async cp(srcPath, destPath, options);');
     }
     return this.callRemoteMethod('cp', ...params);
@@ -355,7 +362,7 @@ class StorageClient {
   }
 
   async readdir(...params) {
-    if (params.length !== 2) {
+    if (params.length !== 2 && params.length !== 1) {
       throw new Error('[Error] The parameter form should be: async readdir(directory, options);');
     }
     return this.callRemoteMethod('readdir', ...params);
