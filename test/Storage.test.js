@@ -45,6 +45,10 @@ describe('[Class] Storage;', () => {
     await storage.rename('test-file-operation/operation.txt', 'test-file-operation/operation1.txt');
     data = await storage.readData('test-file-operation/operation1.txt');
     expect(data.toString()).toMatch('perform related file');
+    await storage.link('test-file-operation/operation1.txt', 'test-file-operation/operation2.txt');
+    data = await storage.readData('test-file-operation/operation2.txt');
+    expect(data.toString()).toMatch('perform related file');
+    await storage.remove('test-file-operation/operation2.txt');
     await storage.rename('test-file-operation/operation1.txt', 'test-file-operation/operation.txt');
     ans = await storage.exists('test-file-operation/operation.txt');
     expect(ans).toBe(true);

@@ -201,7 +201,7 @@ class StorageClient {
               case 'glob':
               case 'readdir':
               case 'stats': {
-                resolve(JSON.stringify(buf.toString()));
+                resolve(JSON.parse(buffer.toString()));
                 break;
               }
               case 'diskOccupy': {
@@ -210,7 +210,7 @@ class StorageClient {
                 break;
               }
               case 'access': {
-                const int = shiftOneByteArray.toInt(buffer);
+                const int = byteArray.toInt(buffer);
                 switch (int) {
                   case 0n:
                     resolve(false);
@@ -345,7 +345,7 @@ class StorageClient {
     if (params.length !== 3) {
       throw new Error('[Error] The parameter form should be: async chown(place, uid, gid);');
     }
-    return await kthis.callRemoteMethod('chown', ...params);
+    return await this.callRemoteMethod('chown', ...params);
   }
 
   async access(...params) {

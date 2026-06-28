@@ -505,11 +505,19 @@ class DistribStorage extends Storage {
               break;
             }
             case 'glob':
-            case 'readdir':
+            case 'readdir': {
+              await this.dealError(async () => {
+                const array = await this[method](...params);
+                return JSON.stringify(array);
+              });
+              break;
+            }
             case 'stats': {
               await this.dealError(async () => {
                 const stats = await this[method](...params);
-                return JSON.stringify(stats);
+                return JSON.stringify(stats, (key, value) => {
+                  return typeof value === 'bigint' ? Number(value) : value;
+                });
               });
               break;
             }
@@ -523,9 +531,10 @@ class DistribStorage extends Storage {
             }
             case 'access':
               try {
+                const { byteArray, } = this;
                 await this[method](...params);
                 connection.write(Buffer.from([1]));
-                connection.write(byteArray.fromInt(1));
+                connection.write(Buffer.from(byteArray.fromInt(1)));
               } catch (error) {
                 const {
                   options: {
@@ -536,7 +545,7 @@ class DistribStorage extends Storage {
                   throw error;
                 } else {
                   if (error instanceof ParameterError) {
-                    connection.write(Buffer.from([1]));
+                    connection.write(Buffer.from([0]));
                     connection.write(error.message);
                   } else {
                     connection.write(Buffer.from([1]));
@@ -767,7 +776,7 @@ class DistribStorage extends Storage {
   }
 
   async treatDontPresenceDistrib(place) {
-    const presenceResults = await this.presencejDistrib(place);
+    const presenceResults = await this.presenceDistrib(place);
     return presenceResults.every(([exists, ip, port]) => presence === false);
   }
 
@@ -792,14 +801,10 @@ class DistribStorage extends Storage {
       if (error === true) {
         throw new Error('[Error] The directory to be operated on does not exist.');
       }
-    } else if (presenceResults.length === 1) {
-      const [presenceResult] = presenceResults;
-      const [_, ip, port] = presenceResult;
-      return [ip, port];
-    } else {
-      if (error === true) {
-        throw new Error('[Error] Multiple files directory please chk system data is correct.')
-      }
+    } else if (presenceResults.length >= 1) {
+      presenceResults.map(([_, ip, port]) => {
+        return [ip, port];
+      });
     }
   }
 
@@ -817,7 +822,7 @@ class DistribStorage extends Storage {
   }
 
   async treatSitesDistrib() {
-    const sites = [];
+    let sites = [];
     const { method, params, } = this;
     switch (method) {
       case 'realpath':
@@ -833,7 +838,7 @@ class DistribStorage extends Storage {
       case 'truncate':
       case 'readData': {
         const [place] = params;
-        site = await this.treatExistsDistrib(place);
+        const site = await this.treatExistsDistrib(place);
         sites.push(site);
         break;
       }
@@ -851,14 +856,14 @@ class DistribStorage extends Storage {
       }
       case 'addBuffer': {
         const [place] = params;
-        site = await this.treatAvailableDistrib();
+        const site = await this.treatAvailableDistrib();
         sites.push(site);
         break;
       }
       case 'link':
       case 'rename': {
         const [place1, place2] = params;
-        site = await this.treatExistsDistrib(place1);
+        const site = await this.treatExistsDistrib(place1);
         sites.push(site);
         const dontExists = await this.treatDontExistsDistrib(place2);
         if (dontExists !== true) {
@@ -869,16 +874,16 @@ class DistribStorage extends Storage {
       case 'mkdir':
       case 'rmdir':
       case 'readdir': {
-        const [diectory] = params;
-        site = await this.treatPresenceDistrib(directory);
-        storages.forEach(([ip, port]) => sites.push([ip, port]));
+        const [directory] = params;
+        const sites1 = await this.treatPresenceDistrib(directory);
+        sites = sites1.concat(sites);
         const { ip, port, } = this;
         sites.push([ip, port]);
         break;
       }
       case 'cp': {
-        const [directory1, directory] = params;
-        site = await this.treatAvaibleDistrib(directory1);
+        const [directory1, directory2] = params;
+        const site = await this.treatExistsDistrib(directory1);
         sites.push(site);
         const dontExists = await this.treatDontPresenceDistrib(directory2);
         if (dontExists !== true) {
