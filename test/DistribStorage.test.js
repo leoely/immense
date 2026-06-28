@@ -45,11 +45,13 @@ describe('[Class] DistribStorage;', () => {
       [ipv6, 8007],
     ];
     const distribStorage1 = new DistribStorage('/tmp/test5', {
-      temporaryDiskAvailable: 5000,
+      develop: true,
+      temporaryDiskAvailable: 100000,
     }, 8006, storages);
     distribStorage1.setTemporaryDiskSwitch(true);
     const distribStorage2 = new DistribStorage('/tmp/test6', {
-      temporaryDiskAvailable: 5000,
+      develop: true,
+      temporaryDiskAvailable: 100000,
     }, 8007, storages);
     distribStorage2.setTemporaryDiskSwitch(true);
     const storageClient = new StorageClient({}, storages);
@@ -72,8 +74,10 @@ describe('[Class] DistribStorage;', () => {
     data = await storageClient.readData('test-bigdata-operation/operation.txt');
     expect(data.toString()).toMatch('write buff');
     await storageClient.rename('test-bigdata-operation/operation.txt', 'test-bigdata-operation/operation1.txt');
-    data = await storageClient.readData('test-bigdata-operation/operation.txt');
+    data = await storageClient.readData('test-bigdata-operation/operation1.txt');
     expect(data.toString()).toMatch('write buff');
+    const diskOccupy = await storageClient.diskOccupy('test-bigdata-operation/operation1.txt');
+    expect(diskOccupy).toBe(9n);
     await storageClient.remove('test-bigdata-operation/operation1.txt');
     await DistribStorage.release([distribStorage1, distribStorage2]);
   });

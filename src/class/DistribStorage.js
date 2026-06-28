@@ -82,8 +82,8 @@ class DistribStorage extends Storage {
       throw new Error('[Error] The params parameter should be an array type.');
     }
     const { length, } = params;
-    if (length !== 2 && length !== 4) {
-      throw new Error('[Error] The length of the params parameter should be equal to two or four.');
+    if (length !== 1 && length !== 2 && length !== 4) {
+      throw new Error('[Error] The length of the params parameter should be equal to one,two or four.');
     }
     const pbytes = [];
     const { shiftOneByteArray, } = this;
@@ -455,8 +455,17 @@ class DistribStorage extends Storage {
       connection.write(Buffer.from([1]));
       connection.write(data);
     } catch (error) {
-      connection.write(Buffer.from([0]));
-      connection.write(error.message);
+      const {
+        options: {
+          develop,
+        },
+      } = this;
+      if (develop === true) {
+        throw error;
+      } else {
+        connection.write(Buffer.from([0]));
+        connection.write(error.message);
+      }
     }
   }
 
@@ -505,9 +514,10 @@ class DistribStorage extends Storage {
               break;
             }
             case 'diskOccupy': {
+              const { byteArray, } = this;
               await this.dealError(async () => {
                 const bigInt = await this[method](...params);
-                return byteArray.fromInt(bigInt);
+                return Buffer.from(byteArray.fromInt(bigInt));
               });
               break;
             }
@@ -517,12 +527,21 @@ class DistribStorage extends Storage {
                 connection.write(Buffer.from([1]));
                 connection.write(byteArray.fromInt(1));
               } catch (error) {
-                if (error instanceof ParameterError) {
-                  connection.write(Buffer.from([1]));
-                  connection.write(error.message);
+                const {
+                  options: {
+                    develop,
+                  }
+                } = this;
+                if (develop === true) {
+                  throw error;
                 } else {
-                  connection.write(Buffer.from([1]));
-                  connection.write(byteArray.fromInt(0));
+                  if (error instanceof ParameterError) {
+                    connection.write(Buffer.from([1]));
+                    connection.write(error.message);
+                  } else {
+                    connection.write(Buffer.from([1]));
+                    connection.write(byteArray.fromInt(0));
+                  }
                 }
               }
               break;
@@ -532,8 +551,17 @@ class DistribStorage extends Storage {
                 connection.write(Buffer.from([1]));
                 connection.write('u');
               } catch (error) {
-                connection.write(Buffer.from([0]));
-                connection.write(error.message);
+                const {
+                  options: {
+                    develop,
+                  },
+                } = this;
+                if (develop === true) {
+                  throw error;
+                } else {
+                  connection.write(Buffer.from([0]));
+                  connection.write(error.message);
+                }
               }
           }
         }
@@ -552,7 +580,16 @@ class DistribStorage extends Storage {
           const sites = await this.dealDistribBuffer(buf);
           connection.write(JSON.stringify([1, sites]));
         } catch (error) {
-          connection.write(JSON.stringify([0, error.message]));
+          const {
+            options: {
+              develop,
+            },
+          } = this;
+          if (develop === true) {
+            throw error;
+          } else {
+            connection.write(JSON.stringify([0, error.message]));
+          }
         }
         this.request = null;
         this.method = '';
@@ -613,16 +650,22 @@ class DistribStorage extends Storage {
     const bigInt1 = shiftOneByteArray.toInt(segments.shift());
     const code = Number(bigInt1);
     const { ip, port, } = this;
-    const place = segments[0].toString();
     switch (code) {
       case 0: {
+        const place = segments[0].toString();
         const exists = await this.exists(place);
         connection.write(this.getBinBuf([0, exists, ip, port]));
         break;
       }
       case 1: {
-        const available = await this.available(place);
+        const available = await this.available();
         connection.write(this.getBinBuf([1, available, ip, port]));
+        break;
+      }
+      case 2: {
+        const place = segments[0].toString();
+        const presence = await this.presence(place);
+        connection.write(this.getBinBuf([2, presence, ip, port]));
         break;
       }
       default:
@@ -686,12 +729,12 @@ class DistribStorage extends Storage {
     }
   }
 
-  async availableDistrib(place) {
+  async availableDistrib() {
     try {
       this.checkCombine();
-      const available = await this.available(place);
+      const available = await this.available();
       const responsePromises = this.getResponsePromises((client) => {
-        client.write(this.getBinBuf([1, place]));
+        client.write(this.getBinBuf([1]));
       });
       const availableMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -742,22 +785,26 @@ class DistribStorage extends Storage {
     }
   }
 
-  async treatPresenceDistrib(place) {
+  async treatPresenceDistrib(place, error) {
     let presenceResults = await this.presenceDistrib(place);
     presenceResults = presenceResults.filter(([presence, ip, port]) => presence === true);
     if (presenceResults.length === 0) {
-      throw new Error('[Error] The directory to be operated on does not exist.');
+      if (error === true) {
+        throw new Error('[Error] The directory to be operated on does not exist.');
+      }
     } else if (presenceResults.length === 1) {
       const [presenceResult] = presenceResults;
       const [_, ip, port] = presenceResult;
       return [ip, port];
     } else {
-      throw new Error('[Error] Multiple files directory please chk system data is correct.')
+      if (error === true) {
+        throw new Error('[Error] Multiple files directory please chk system data is correct.')
+      }
     }
   }
 
-  async treatAvailableDistrib(place) {
-    const availableResults = await this.availableDistrib(place);
+  async treatAvailableDistrib() {
+    const availableResults = await this.availableDistrib();
     let max = -Infinity;
     const site = [];
     availableResults.forEach(([available, ip, port]) => {
@@ -792,7 +839,7 @@ class DistribStorage extends Storage {
       }
       case 'diskOccupy': {
         const [place] = params;
-        const site1 = await this.treatExistDistrib(place);
+        const site1 = await this.treatExistsDistrib(place, false);
         const site2 = await this.treatPresenceDistrib(place);
         if (site1 <= site2) {
           site = site2;
@@ -804,14 +851,14 @@ class DistribStorage extends Storage {
       }
       case 'addBuffer': {
         const [place] = params;
-        site = await this.treatAvailableDistrib(place);
+        site = await this.treatAvailableDistrib();
         sites.push(site);
         break;
       }
       case 'link':
       case 'rename': {
         const [place1, place2] = params;
-        site = await this.treatAvailableDistrib(place1);
+        site = await this.treatExistsDistrib(place1);
         sites.push(site);
         const dontExists = await this.treatDontExistsDistrib(place2);
         if (dontExists !== true) {

@@ -377,9 +377,10 @@ class Storage {
     this.location = location;
     const defaultOptions = {
       minimumStorageCapacity: 5 * 1024 ** 3,
-      acquireAvaiableDelta: false,
+      acquireAvailableDelta: false,
       temporaryDiskAvailable: -1,
       temporaryDiskSwitch: false,
+      develop: false,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
@@ -397,6 +398,9 @@ class Storage {
     const {
       options: {
         minimumStorageCapacity,
+        acquireAvailableDelta,
+        temporaryDiskAvailable,
+        develop,
       },
     } = this;
     if (!Number.isInteger(minimumStorageCapacity)) {
@@ -404,6 +408,15 @@ class Storage {
     }
     if (!(minimumStorageCapacity > 0)) {
       throw new Error('[Error] The minimum storage capacity should be greater than zero.');
+    }
+    if (typeof acquireAvailableDelta !== 'boolean') {
+      throw new Error('[Error] The acquire available delta should be of boolean type.')
+    }
+    if (typeof develop !== 'boolean') {
+      throw new Error('[Error] The option develop should be of boolean type.');
+    }
+    if (!Number.isInteger(temporaryDiskAvailable)) {
+      throw new Error('[Error] The temporary disk available should be an integer type.');
     }
   }
 
@@ -424,12 +437,12 @@ class Storage {
       },
     } = this;
     if (acquireAvailableDelta === true) {
-      this.beforeAvailable = await this.available();
+      this.beforeAvailable = await this.available(true);
     }
     await callback();
     if (acquireAvailableDelta === true) {
       const { beforeAvailable, } = this;
-      const afterAvailable = await this.available();
+      const afterAvailable = await this.available(true);
       return beforeAvailable - afterAvailable;
     } else {
       return -1;
@@ -1194,17 +1207,31 @@ class Storage {
     return diskUsage;
   }
 
-  async available() {
+  async available(flag) {
     const {
       options: {
         temporaryDiskSwitch,
       },
     } = this;
-    if (temporaryDiskSwitch === true) {
-      return this[temporaryDiskAvailableKey];
+    if (flag !== undefined) {
+      if (typeof flag !== 'boolean') {
+        throw new Error('[Error] The parameter flag should be of boolean type.');
+      }
+    }
+    if (flag === undefined) {
+      if (temporaryDiskSwitch === true) {
+        return this[temporaryDiskAvailableKey];
+      } else {
+        const diskUsage = await this.diskUsage();
+        return diskUsage.available;
+      }
     } else {
-      const diskUsage = await this.diskUsage();
-      return diskUsage.available;
+      if (flag === true) {
+        const diskUsage = await this.diskUsage();
+        return diskUsage.available;
+      } else {
+        return this[temporaryDiskAvailableKey];
+      }
     }
   }
 
