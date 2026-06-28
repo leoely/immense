@@ -1198,7 +1198,7 @@ class Storage {
     if (!checkMultipleHidden(position)) {
       throw new Error('[Error] Cannot operate hidden directorys.');
     }
-    return await existsPromise(directory);
+    return await existsPromise(position);
   }
 
   async diskUsage() {

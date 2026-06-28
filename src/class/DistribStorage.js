@@ -780,17 +780,21 @@ class DistribStorage extends Storage {
     return presenceResults.every(([exists, ip, port]) => presence === false);
   }
 
-  async treatExistsDistrib(place) {
+  async treatExistsDistrib(place, error) {
     let existsResults = await this.existsDistrib(place);
     existsResults = existsResults.filter(([exists, ip, port]) => exists === true);
     if (existsResults.length === 0) {
-      throw new Error('[Error] The file to be operated on does not exist.');
+      if (error === true) {
+        throw new Error('[Error] The file to be operated on does not exist.');
+      }
     } else if (existsResults.length === 1) {
       const [existsResult] = existsResults;
       const [_, ip, port] = existsResult;
       return [ip, port];
     } else {
-      throw new Error('[Error] Multiple files exist please check system data is correct.')
+      if (error === true) {
+        throw new Error('[Error] Multiple files exist please check system data is correct.')
+      }
     }
   }
 
@@ -801,8 +805,9 @@ class DistribStorage extends Storage {
       if (error === true) {
         throw new Error('[Error] The directory to be operated on does not exist.');
       }
+      return [];
     } else if (presenceResults.length >= 1) {
-      presenceResults.map(([_, ip, port]) => {
+      return presenceResults.map(([_, ip, port]) => {
         return [ip, port];
       });
     }
@@ -844,14 +849,14 @@ class DistribStorage extends Storage {
       }
       case 'diskOccupy': {
         const [place] = params;
-        const site1 = await this.treatExistsDistrib(place, false);
-        const site2 = await this.treatPresenceDistrib(place);
-        if (site1 <= site2) {
-          site = site2;
+        const site = await this.treatExistsDistrib(place, false);
+        const sites2 = await this.treatPresenceDistrib(place);
+        const { length: length2, } = sites2;
+        if (site === undefined) {
+          sites = sites.concat(sites2);
         } else {
-          site = site1;
+          sites.push(site);
         }
-        sites.push(site);
         break;
       }
       case 'addBuffer': {
