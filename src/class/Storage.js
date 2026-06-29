@@ -1396,7 +1396,7 @@ class Storage {
     if (name !== undefined) {
       await this.addPointerToPointers(pointersPath, code, frequency);
       const countsPath = getCountsPath(pointersPath);
-      await this.addCountsToCounts(countsPath, code, frequency);
+      await this.addCountToCounts(countsPath, code, frequency);
       const namesDirectory = path.join(path.dirname(pointersPath), String(code));
       if (!await existsPromise(namesDirectory)) {
         await fsPromises.mkdir(namesDirectory);
@@ -1406,11 +1406,11 @@ class Storage {
     } else {
       await this.addPointerToPointers(pointersPath, code, frequency);
       const countsPath = getCountsPath(pointersPath);
-      await this.addCountsToCounts(countsPath, code, frequency);
+      await this.addCountToCounts(countsPath, code, frequency);
     }
   }
 
-  async addCountsToCounts(countsPath, code, frequency) {
+  async addCountToCounts(countsPath, code, frequency) {
     const { shiftTwoBytes, } = this;
     const words = [shiftTwoBytes.fromInt(code), 0, shiftTwoBytes.fromInt(frequency), 1, 3, 1, 0];
     if (await existsPromise(countsPath)) {

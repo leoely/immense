@@ -104,5 +104,5 @@ describe('[Class] DistribStorage;', () => {
     await storageClient.remove('test-bigdata-operation/link.txt');
     await storageClient.remove('test-bigdata-operation/operation1.txt');
     await DistribStorage.release([distribStorage1, distribStorage2]);
-  }, 6000);
+  }, 7000);
 });

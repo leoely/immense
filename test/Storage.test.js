@@ -38,6 +38,7 @@ describe('[Class] Storage;', () => {
     expect(data.toString()).toMatch('perform related file OPERATIONS. etc');
     await storage.truncate('test-file-operation/operation.txt', 21);
     data = await storage.readData('test-file-operation/operation.txt');
+    expect(data.toString()).toMatch('perform related file');
     await expect(storage.access('test-file-operation/operation.txt', constants.R_OK)).resolves.not.toThrow();
     await storage.chmod('test-file-operation/operation.txt', '775');
     await storage.chown('test-file-operation/operation.txt', 502, 0);
@@ -67,6 +68,8 @@ describe('[Class] Storage;', () => {
     expect(afterNs > beforeNs).toBe(true);
     const watcher = await storage.watch('test-file-operation/operation.txt');
     expect(() => Storage.unwatchSync(watcher)).not.toThrow();
+    await storage.cp('test-file-operation', 'test-file-operation-backup', { recursive: true, });
+    await storage.rmdir('test-file-operation-backup');
     const files = await storage.readdir('test-file-operation', { recursive: true, });
     expect(JSON.stringify(files)).toMatch('[\"link.txt\",\"operation.txt\"]');
     const paths = await storage.glob('**/*');
@@ -81,5 +84,5 @@ describe('[Class] Storage;', () => {
     expect(diskUsage.total).toBe(250790436864);
     expect(childProcess.execSync('ls /tmp/test').toString()).toMatch('');
     expect(childProcess.execSync('ls -l /tmp/test/.index').toString()).toMatch('');
-  }, 7000);
+  }, 8000);
 });
