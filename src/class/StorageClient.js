@@ -93,10 +93,12 @@ class StorageClient {
           case 'readdir':
             client.write(JSON.stringify(params.slice(0, 1)));
             break;
-          case 'cp':
           case 'link':
           case 'rename':
             client.write(JSON.stringify(params.slice(0, 2)));
+            break;
+          case 'cp':
+            client.write(JSON.stringify(params.slice(0, 3)));
             break;
           case 'glob':
             client.write(JSON.stringify([]));
@@ -246,7 +248,7 @@ class StorageClient {
 
   async readData(...params) {
     if (params.length !== 2 && params.length !== 1) {
-      throw new Error('[Error] The parameter form should be: async readData(place, options);');
+      throw new Error('[Error] The parameter form should be: async readData(place, [options]);');
     }
     return await this.callRemoteMethod('readData', ...params);
   }
@@ -316,7 +318,7 @@ class StorageClient {
 
   async cp(...params) {
     if (params.length !== 3 && params.length !== 2) {
-      throw new Error('[Error] The parameter form should be: async cp(srcPath, destPath, options);');
+      throw new Error('[Error] The parameter form should be: async cp(srcPath, destPath, [options]);');
     }
     return await this.callRemoteMethod('cp', ...params);
   }
@@ -365,7 +367,7 @@ class StorageClient {
 
   async readdir(...params) {
     if (params.length !== 2 && params.length !== 1) {
-      throw new Error('[Error] The parameter form should be: async readdir(directory, options);');
+      throw new Error('[Error] The parameter form should be: async readdir(directory, [options]);');
     }
     return await this.callRemoteMethod('readdir', ...params);
   }
@@ -378,15 +380,15 @@ class StorageClient {
   }
 
   async rmdir(...params) {
-    if (params.length !== 1) {
-      throw new Error('[Error] The parameter form should be: async rmdir(directory) ;');
+    if (params.length !== 1 && params.length !== 2) {
+      throw new Error('[Error] The parameter form should be: async rmdir(directory, [options]);');
     }
     return await this.callRemoteMethod('rmdir', ...params);
   }
 
   async glob(...params) {
-    if (params.length !== 2) {
-      throw new Error('[Error] The parameter form should be: async glob(pattern, options);');
+    if (params.length !== 2 && params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async glob(pattern, [options]);');
     }
     return await this.callRemoteMethod('glob', ...params);
   }

@@ -859,6 +859,7 @@ class DistribStorage extends Storage {
         }
         break;
       }
+      case 'mkdir':
       case 'addBuffer': {
         const [place] = params;
         const site = await this.treatAvailableDistrib();
@@ -876,7 +877,6 @@ class DistribStorage extends Storage {
         }
         break;
       }
-      case 'mkdir':
       case 'rmdir':
       case 'readdir': {
         const [directory] = params;
@@ -885,12 +885,27 @@ class DistribStorage extends Storage {
         break;
       }
       case 'cp': {
-        const [directory1, directory2] = params;
-        const site = await this.treatExistsDistrib(directory1);
-        sites.push(site);
-        const dontExists = await this.treatDontPresenceDistrib(directory2);
-        if (dontExists !== true) {
-          throw new Error('[Error] The path currently being operated on already exists.');
+        const [path1, path2, options] = params;
+        const site = await this.treatExistsDistrib(path1, false);
+        if (site === undefined) {
+          const sites1 = await this.treatPresenceDistrib(path1);
+          sites = sites.concat(sites1);
+          const dontExists = await this.treatDontPresenceDistrib(path2);
+          if (dontExists !== true) {
+            throw new Error('[Error] The directory currently being operated on already exists.');
+          }
+          const {
+            recursive,
+          } = options;
+          if (recursive !== true) {
+            throw new Error('[Error] To copy directory,need to set recursive to true.');
+          }
+        } else {
+          sites.push(site);
+          const dontExists = await this.treatDontExistsDistrib(path2);
+          if (dontExists !== true) {
+            throw new Error('[Error] The file currently being operated on already exists.');
+          }
         }
         break;
       }

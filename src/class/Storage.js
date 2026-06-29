@@ -1132,7 +1132,7 @@ class Storage {
     this[temporaryUpdateDiskAvailableKey](availableDelta);
   }
 
-  async rmdir(directory) {
+  async rmdir(directory, options) {
     if (typeof directory !== 'string') {
       throw new Error('[Error] The parameter directory should be of string type.');
     }
@@ -1151,7 +1151,7 @@ class Storage {
         if (dirent.isDirectory()) {
           await this.rmdir(subDirectory);
         }
-        if (dirent.isFile()) {
+        if (dirent.isFile() || dirent.isSymbolicLink()) {
           await this.removeEntireIndex(subDirectory);
           const filePath = path.join(location, subDirectory)
           await fsPromises.unlink(filePath);
