@@ -777,7 +777,7 @@ class DistribStorage extends Storage {
 
   async treatDontPresenceDistrib(place) {
     const presenceResults = await this.presenceDistrib(place);
-    return presenceResults.every(([exists, ip, port]) => presence === false);
+    return presenceResults.every(([presence, ip, port]) => presence === false);
   }
 
   async treatExistsDistrib(place, error) {
@@ -882,8 +882,6 @@ class DistribStorage extends Storage {
         const [directory] = params;
         const sites1 = await this.treatPresenceDistrib(directory);
         sites = sites1.concat(sites);
-        const { ip, port, } = this;
-        sites.push([ip, port]);
         break;
       }
       case 'cp': {

@@ -231,12 +231,13 @@ class StorageClient {
     const returns = await Promise.all(promises);
     const { length, } = returns;
     switch (name) {
+      case 'readdir':
       case 'glob': {
         let paths = [];
         returns.forEach((r) => {
           paths = paths.concat(r);
         });
-        break;
+        return paths;
       }
       default:
         return returns[0];

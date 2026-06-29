@@ -92,11 +92,12 @@ describe('[Class] DistribStorage;', () => {
     await storageClient.addBuffer('test-bigdata-operation/backup.txt', Buffer.from('perform big data related operations.'));
     data = await storageClient.readData('test-bigdata-operation/backup.txt');
     expect(data.toString()).toMatch('perform big data related operations.');
-    //expect(JSON.stringify(files)).toMatch('[\"link.txt\",\"operation.txt\"]');
+    const files = await storageClient.readdir('test-bigdata-operation');
+    expect(JSON.stringify(files)).toMatch('[\"link.txt\",\"operation1.txt\",\"backup.txt\"]');
     //await storageClient.cp('test-bigdata-operation', 'test-bigdata-operation-backup');
-    //await storageClient.remove('test-bigdata-operation/backup.txt');
-    //await storageClient.remove('test-bigdata-operation/link.txt');
-    //await storageClient.remove('test-bigdata-operation/operation1.txt');
+    await storageClient.remove('test-bigdata-operation/backup.txt');
+    await storageClient.remove('test-bigdata-operation/link.txt');
+    await storageClient.remove('test-bigdata-operation/operation1.txt');
     await DistribStorage.release([distribStorage1, distribStorage2]);
   });
 });
