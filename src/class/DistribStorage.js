@@ -830,6 +830,14 @@ class DistribStorage extends Storage {
     let sites = [];
     const { method, params, } = this;
     switch (method) {
+      case 'exists': {
+        const [place] = params;
+        const site = await this.treatExistsDistrib(place, false);
+        if (site !== undefined) {
+          sites.push(site);
+        }
+        break;
+      }
       case 'realpath':
       case 'access':
       case 'chown':

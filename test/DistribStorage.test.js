@@ -56,6 +56,8 @@ describe('[Class] DistribStorage;', () => {
     distribStorage2.setTemporaryDiskSwitch(true);
     const storageClient = new StorageClient({}, storages);
     await DistribStorage.combine([distribStorage1, distribStorage2]);
+    let exists = await storageClient.exists('test-bigdata-operation/backup.txt');
+    expect(exists).toBe(false);
     await storageClient.addBuffer('test-bigdata-operation/operation.txt', Buffer.from('perform big data related operations.'));
     let data = await storageClient.readData('test-bigdata-operation/operation.txt');
     expect(data.toString()).toMatch('perform big data related operations.');
@@ -88,7 +90,7 @@ describe('[Class] DistribStorage;', () => {
     const access = await storageClient.access('test-bigdata-operation/operation1.txt', constants.R_OK);
     expect(access).toBe(true);
     const realpath = await storageClient.realpath('test-bigdata-operation/link.txt');
-    expect(realpath).toMatch('/private/tmp/test5/test-bigdata-operation/operation1.txt');
+    expect(realpath).toMatch('/private/tmp/test6/test-bigdata-operation/operation1.txt');
     await storageClient.addBuffer('test-bigdata-operation/backup.txt', Buffer.from('perform big data related operations.'));
     data = await storageClient.readData('test-bigdata-operation/backup.txt');
     expect(data.toString()).toMatch('perform big data related operations.');
@@ -100,6 +102,8 @@ describe('[Class] DistribStorage;', () => {
     await storageClient.rmdir('test-bigdata-operation-new');
     const paths = await storageClient.glob('**/*.txt');
     expect(JSON.stringify(paths)).toMatch('[\"test-bigdata-operation/backup.txt\",\"test-bigdata-operation/link.txt\",\"test-bigdata-operation/operation1.txt\"]');
+    exists = await storageClient.exists('test-bigdata-operation/backup.txt');
+    expect(exists).toBe(true);
     await storageClient.remove('test-bigdata-operation/backup.txt');
     await storageClient.remove('test-bigdata-operation/link.txt');
     await storageClient.remove('test-bigdata-operation/operation1.txt');
