@@ -30,7 +30,10 @@ class MultiStorageClient {
       index,
       length,
     } = this;
-    outerLoop: while (true) {
+    outerLoop: for (let i = 0; i <= length; i += 1) {
+      if (i === length) {
+        throw new Error('[Error] The path currently being operated on does not exist.');
+      }
       if (index === length - 1) {
         this.index = 0;
       } else {
