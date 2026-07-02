@@ -31,9 +31,7 @@ class StorageClient {
   getNextIndex() {
     const {
       index,
-      allStorages: {
-        length,
-      },
+      length,
     } = this;
     if (index === length - 1) {
       this.index = 0;
@@ -55,6 +53,10 @@ class StorageClient {
     if (Array.isArray(allStorages) !== true) {
       throw new Error('[Error] The parameter all storages should be array type.');
     }
+    const {
+      length,
+    } = allStorages;
+    this.length = length;
     this.allStorages = allStorages;
   }
 
@@ -278,9 +280,15 @@ class StorageClient {
 
   async exists(...params) {
     if (params.length !== 1) {
-      throw new Error('[Error] The parameter form should be: async exist(place)');
+      throw new Error('[Error] The parameter form should be: async exist(place);');
     }
     return await this.callRemoteMethod('exists', ...params);
+  }
+
+  async presence(...params) {
+    if (params.length !== 1) {
+      throw new Error('[Error] The parameter form should be: async presence(directory);');
+    }
   }
 
   async readData(...params) {

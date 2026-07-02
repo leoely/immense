@@ -98,7 +98,11 @@ describe('[Class] DistribStorage;', () => {
     expect(JSON.stringify(files)).toMatch('[\"link.txt\",\"operation1.txt\",\"backup.txt\"]');
     await storageClient.cp('test-bigdata-operation', 'test-bigdata-operation-backup', { recursive: true, });
     await storageClient.rmdir('test-bigdata-operation-backup');
+    let presence = await storageClient.presence('test-bigdata-operation-backup');
+    expect(presence).toBe(false);
     await storageClient.mkdir('test-bigdata-operation-new');
+    presence = await storageClient.presence('test-bigdata-operation-backup');
+    expect(presence).toBe(true);
     await storageClient.rmdir('test-bigdata-operation-new');
     const paths = await storageClient.glob('**/*.txt');
     expect(JSON.stringify(paths)).toMatch('[\"test-bigdata-operation/backup.txt\",\"test-bigdata-operation/link.txt\",\"test-bigdata-operation/operation1.txt\"]');
