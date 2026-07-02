@@ -101,7 +101,7 @@ describe('[Class] DistribStorage;', () => {
     let presence = await storageClient.presence('test-bigdata-operation-backup');
     expect(presence).toBe(false);
     await storageClient.mkdir('test-bigdata-operation-new');
-    presence = await storageClient.presence('test-bigdata-operation-backup');
+    presence = await storageClient.presence('test-bigdata-operation-new');
     expect(presence).toBe(true);
     await storageClient.rmdir('test-bigdata-operation-new');
     const paths = await storageClient.glob('**/*.txt');

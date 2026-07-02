@@ -838,6 +838,14 @@ class DistribStorage extends Storage {
         }
         break;
       }
+      case 'presence': {
+        const [directory] = params;
+        const sites1 = await this.treatPresenceDistrib(directory, false);
+        if (sites1.length !== 0) {
+          sites = sites.concat(sites1);
+        }
+        break;
+      }
       case 'realpath':
       case 'access':
       case 'chown':

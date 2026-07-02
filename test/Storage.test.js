@@ -7,10 +7,10 @@ import Storage from '~/class/Storage';
 describe('[Class] Storage;', () => {
   test('Storage should be able to complete basic file operations.', async () => {
     const storage = new Storage('/tmp/test');
-    let presence = storage.presence('test-directory-operation');
+    let presence = await storage.presence('test-directory-operation');
     expect(presence).toBe(false);
     await storage.mkdir('test-directory-operation');
-    presence = storage.presence('test-directory-operation');
+    presence = await storage.presence('test-directory-operation');
     expect(presence).toBe(true);
     await storage.addBuffer('test-directory-operation/operation.txt', Buffer.from('perform related diectory operations'));
     let ans = await storage.exists('test-directory-operation1/operation.txt');
