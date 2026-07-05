@@ -13,15 +13,12 @@ class MultiStorageClient {
     const {
       allStorages,
     } = storageClient;
-    if (allStorages === 0) {
+    if (allStorages.length === 0) {
       throw new Error('[Error] Adding storageClient with an empty all storages has not practical effect.');
     }
-    this.storageClients.push(storageClient);
-    const {
-      storageClients: {
-        length,
-      },
-    } = this;
+    const { storageClients, } = this;
+    storageClients.push(storageClient);
+    const { length, } = storageClients;
     this.length = length;
   }
 
@@ -40,7 +37,7 @@ class MultiStorageClient {
         this.index += 1;
       }
       const {
-        index: newIndex,
+        index: nextIndex,
         storageClients,
       } = this;
       const storageClient = storageClients[nextIndex];
@@ -65,6 +62,11 @@ class MultiStorageClient {
           break;
       }
     }
+  }
+
+  getStorageClient() {
+    const { index, storageClients, } = this;
+    return storageClients[index];
   }
 
   async callMultiMethod(name, ...params) {
@@ -119,22 +121,11 @@ class MultiStorageClient {
       case 'rmdir':
       case 'truncate': {
         const { storageClients, } = this;
-        let count = 0;
-        let err;
+        let result;
         for await (const storageClient of storageClients) {
-          try {
-            const result = await storageClient[name];
-            return result;
-          } catch (error) {
-            count += 1;
-            err = error;
-          }
+          result = await storageClient[name];
         }
-        const { length, } = this;
-        if (count === length) {
-          throw err;
-        }
-        break;
+        return result;
       }
       case 'glob': {
         const { storageClients, } = this;
@@ -157,17 +148,12 @@ class MultiStorageClient {
     }
   }
 
-  getStorageClient() {
-    const { index, storageClients, } = this;
-    return storageClients[index];
-  }
-
   async readData(...params) {
-    await callMultiMethod('readData', ...params);
+    return await this.callMultiMethod('readData', ...params);
   }
 
   async readBufferPiece(...params) {
-    await callMultiMethod('readBufferPiece', ...params);
+    return await this.callMultiMethod('readBufferPiece', ...params);
   }
 
   async writeBufferPiece(...params) {
@@ -177,6 +163,7 @@ class MultiStorageClient {
   }
 
   async addBuffer(...params) {
+    await this.callMultiMethod('addBuffer', ...params);
   }
 
   async appendData(...params) {
