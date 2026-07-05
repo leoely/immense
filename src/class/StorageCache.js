@@ -132,22 +132,7 @@ class StorageCache {
     }
   }
 
-  addBlocks(place, blocks) {
-    if (typeof place !== 'string') {
-      throw new Error('[Error] The parameter place should be a string type.');
-    }
-    if (!Array.isArray(blocks)) {
-      throw new Error('[Error] The parameter blocks should be an array type.');
-    }
-    const {
-      options,
-      data,
-    } = this;
-    this.checkNotNull(place);
-    const digital = data.gain(place);
-    const {
-      blocks: chunks,
-    } = digital;
+  checkBlocksContent(blocks) {
     blocks.forEach(([type, index, range, data], idx) => {
       if (!Number.isInteger(type)) {
         throw new Error('[Error] The type parameter of the ' + idx + ' block should be an integer type.');
@@ -169,8 +154,100 @@ class StorageCache {
         throw new Error('[Error] The end parameter of the ' + idx + ' block should be an integer type.');
       }
     });
+  }
+
+  addBlocks(place, blocks) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(blocks)) {
+      throw new Error('[Error] The parameter blocks should be an array type.');
+    }
+    const {
+      options,
+      data,
+    } = this;
+    this.checkNotNull(place);
+    const digital = data.gain(place);
+    const {
+      blocks: chunks,
+    } = digital;
+    this.checkBlocksContent(blocks);
     blocks.forEach(([type, index, range, data]) => {
-      chunks[index] = [type, index, range, data];
+      chunks[index] = [type, range, data];
+    });
+  }
+
+  removeBlocks(place, indexs) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Number.isInteger(index)) {
+      throw new Error('[Error] The parameter blocks should be a number type.');
+    }
+    const {
+      data,
+    } = this;
+    const digital = data.gain(place);
+    const {
+      blocks,
+    } = digital;
+    indexs.forEach((index, idx) => {
+      if (!Number.isInteger(idx)) {
+        throw new Error('[Error] The ' + idx ' index is not a number.');
+      }
+    });
+    indexs.forEach((index) => {
+      const block = blocks[index];
+      if (block !== undefined) {
+        blocks[index] = undefined;
+      } else {
+        throw new Error('[Error] The block to be deleted does not exist;no valid deletion has been performed.');
+      }
+    });
+  }
+
+  updateBlocks(place, blocks) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(blocks)) {
+      throw new Error('[Error] The parameter blocks should be an array type.');
+    }
+    const {
+      data,
+    } = this;
+    const digital = data.gain(place);
+    const {
+      blocks: chunks,
+    } = digital;
+    if (chunks.length === 0) {
+      throw new Error('[Error] Blocks are currently empty,making update operations impossible.');
+    }
+    this.checkBlocksContent(blocks);
+    blocks.forEach(([type, index, range, data]) => {
+      chunks[index] = [type, range, data];
+    });
+  }
+
+  getBlocks(place, indexs) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(indexs)) {
+      throw new Error('[Error] The parameter indexs should be an array type.');
+    }
+    ranges.forEach((range, idx) => {
+      const [start, end] = range;
+      if (!Number.isInteger(start)) {
+        throw new Error('[Error] The start parameter of the ' + idx + ' range should be an integer type.');
+      }
+      if (!Number.isInteger(end)) {
+        throw new Error('[Error] The end parameter of the ' + idx + ' range should be an integer type.');
+      }
+      if (start > end) {
+        throw new Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
+      }
     });
   }
 }
