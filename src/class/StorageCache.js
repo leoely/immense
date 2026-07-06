@@ -1,3 +1,4 @@
+import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
 
 class StorageCache {
@@ -192,6 +193,9 @@ class StorageCache {
     const {
       blocks,
     } = digital;
+    if (blocks.length === 0) {
+      throw new Error('[Error] The blocks cannot be effectively delete because do not exist.');
+    }
     indexs.forEach((index, idx) => {
       if (!Number.isInteger(idx)) {
         throw new Error('[Error] The ' + idx ' index is not a number.');
@@ -230,25 +234,118 @@ class StorageCache {
     });
   }
 
-  getBlocks(place, indexs) {
+  obtainCacheBlock(block, head, tail) {
+    if (typeof block === 'string') {
+      return block.substring(head, tail);
+    }
+    if (Buffer.isBuffer(block)) {
+      return block.subarray(head, tail);
+    }
+  }
+
+  checkRangeContent(range) {
+    if (!Array.isArray(range)) {
+      throw new Error('[Error] The parameter indexs should be an array type.');
+    }
+    const [start, end] = range;
+    if (!Number.isInteger(start)) {
+      throw new Error('[Error] The start parameter of the ' + idx + ' range should be an integer type.');
+    }
+    if (!Number.isInteger(end)) {
+      throw new Error('[Error] The end parameter of the ' + idx + ' range should be an integer type.');
+    }
+    if (start > end) {
+      throw new Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
+    }
+  }
+
+  removeBlocks(place, range) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
-    if (!Array.isArray(indexs)) {
+    this.checkRangeContent(range);
+    const {
+      data,
+      options: {
+        blockSize,
+      },
+    } = this;
+    const digital = data.gain(place);
+    const {
+      blocks: chunks,
+    } = digital;
+    const range = ranges[i];
+    const [start, end] = range;
+    const begin = start % blockSize;
+    if (end <= (begin * blockSize - 1)) {
+      ans.push(this.removeCacheStorage(block, begin, end));
+      continue;
+    }
+    let ptr = begin;
+    while (true) {
+      ptr += blockSize;
+      if (ptr >= end) {
+        this.removeCacheStorage(block, ptr - blockSize, end);
+        break;
+      } else {
+        this.removeCacheStoraage(block, ptr - blockSize, ptr);
+      }
+    }
+  }
+
+  getCacheStorage(block, start, end) {
+  }
+
+  getBlocks(place, range) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(range)) {
       throw new Error('[Error] The parameter indexs should be an array type.');
     }
-    ranges.forEach((range, idx) => {
-      const [start, end] = range;
-      if (!Number.isInteger(start)) {
-        throw new Error('[Error] The start parameter of the ' + idx + ' range should be an integer type.');
+    this.checkRangeContent(range);
+    const {
+      data,
+      options: {
+        blockSize,
+      },
+    } = this;
+    const digital = data.gain(place);
+    const {
+      blocks: chunks,
+    } = digital;
+    const [start, end] = range;
+    const begin = start % blockSize;
+    const ans = [];
+    if (end <= (begin * blockSize - 1)) {
+      ans.push(this.getCacheStorage(block, begin, end));
+      continue;
+    }
+    let ptr = begin;
+    while (true) {
+      ptr += blockSize;
+      if (ptr >= end) {
+        ans.push(this.getCacheStorage(block, ptr - blockSize, end));
+        break;
+      } else {
+        ans.push(this.getCacheStorage(block, ptr - blockSize, ptr));
       }
-      if (!Number.isInteger(end)) {
-        throw new Error('[Error] The end parameter of the ' + idx + ' range should be an integer type.');
-      }
-      if (start > end) {
-        throw new Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
-      }
+    }
+    return ans;
+  }
+
+  getGroupBlocks(place, ranges) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(ranges)) {
+      throw new Error('[Error] The parameter indexs should be an array type.');
+    }
+    const ans = [];
+    ranges.forEach((range) => {
+      ans.push(this.getBlocks(range));
     });
+    return ans;
   }
 }
 
