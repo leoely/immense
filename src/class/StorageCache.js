@@ -1,6 +1,49 @@
 import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
 
+function inSection(value, section) {
+  const [left, right] = section;
+  if (value >= left && value <= right) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function findInterSection(section1, section2) {
+  const [left1, right1] = section1;
+  const [left2, right2] = section2;
+  if ((right2 >= left1) || (right1 >= left2)) {
+    const left = Math.max(left1, left2);
+    const right = Math.min(right1, right2);
+    return [left, right];
+  }
+  throw new Error('[Error] The two sets have no intersection.');
+}
+
+function getDifferenceSection(fullSection, removeSection) {
+  const ans = [];
+  const [fullLeft, fullRight] = fullSection;
+  const [removeLeft, removeRight] = removeSection;
+  if (inSection(removeLeft, fullSection)) {
+    ans.push([fullLeft, removeLeft - 1]);
+    if (removeRight <= fullRight) {
+      ans.push([removeRight, fullRight]);
+    }
+  }
+  if (inSection(removeRight, fullSection)) {
+    ans.push([removeRight + 1, fullRight]);
+    if (removeLeft >= removeRight) {
+      ans.push([fullLeft, removeLeft]);
+    }
+  }
+}
+
+function getComplement(fullSection, removeSection) {
+  const interSection = findInterSection(fullSection, removeSection);
+  return getDifferenceSet(fullSection, interSection);
+}
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -157,7 +200,84 @@ class StorageCache {
     });
   }
 
-  addBlocks(place, blocks) {
+  setCacheBlock(block, begin, end) {
+    if (typeof data === 'string') {
+      block.data = data.substring(begin, end + 1);
+    }
+    if (Buffer.isBuffer(data)) {
+      block.data = data.subarray(begin, end + 1);
+    }
+  }
+
+  addCacheBlock(block, data, begin, end) {
+    const [begin, end] = range;
+    const { data, range: scope, } = block;
+    if (data === undefined) {
+      this.setCacheBlock(block, begin, end);
+    }
+    if (!interSection(range, scope)) {
+      this.setCacheBlock(block, begin, end);
+    } else {
+      const [left, right] = scope;
+      if (begin <= left && right >= end) {
+        block.range = [begin, end];
+        this.setCacheBlock(block, begin, end);
+      } else if (begin <= left) {
+        block.range = [begin, right];
+        this.setCacheBlock(block, begin, end);
+      } else if (right >= end) {
+        block.range = [left, end];
+        this.setCacheBlock(block, left, end);
+      }
+    }
+  }
+
+  addBlocks(place, range, figure) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(blocks)) {
+      throw new Error('[Error] The parameter blocks should be an array type.');
+    }
+    if (Buffer.isBuffer(figure) && typeof figure !== 'string') {
+      throw new Error('[Error] The parameter blocks should be a buffer or string.');
+    }
+    const {
+      data,
+      options: {
+        blockSize,
+      },
+    } = this;
+    this.checkNotNull(place);
+    const digital = data.gain(place);
+    const {
+      blocks: chunks,
+    } = digital;
+    this.checkBlocksContent(blocks);
+    const [start, end] = range;
+    const begin = start % blockSize;
+    const count = begin;
+    if (end <= ((begin + 1) * blockSize)) {
+      const chunk = chunks[begin];
+      this.addCacheBlock(chunk, data, begin, end);
+      continue;
+    }
+    let ptr = (begin + 1) * blockSize;
+    let count = begin + 1;
+    while (true) {
+      ptr += blockSize;
+      if (ptr >= end) {
+        const chunk = chunks[count];
+        this.addCacheBlock(chunk, data, ptr - blockSize, end);
+        break;
+      } else {
+        const chunk = chunks[count];
+        this.addCacheBlock(chunk, data, ptr - blockSize, ptr);
+      }
+    }
+  }
+
+  overlapBlocks(place, blocks) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
@@ -175,71 +295,20 @@ class StorageCache {
     } = digital;
     this.checkBlocksContent(blocks);
     blocks.forEach(([type, index, range, data]) => {
+      const chunk = chunks[index];
+      if (chunk === undefined) {
+        throw new Error('[Error] The previous block does not exist,confirming the operation was correct.');
+      }
       chunks[index] = [type, range, data];
     });
   }
 
-  removeBlocks(place, indexs) {
-    if (typeof place !== 'string') {
-      throw new Error('[Error] The parameter place should be a string type.');
+  getCacheData(data, begin, end) {
+    if (typeof data === 'string') {
+      return data.substring(begin, end + 1);
     }
-    if (!Number.isInteger(index)) {
-      throw new Error('[Error] The parameter blocks should be a number type.');
-    }
-    const {
-      data,
-    } = this;
-    const digital = data.gain(place);
-    const {
-      blocks,
-    } = digital;
-    if (blocks.length === 0) {
-      throw new Error('[Error] The blocks cannot be effectively delete because do not exist.');
-    }
-    indexs.forEach((index, idx) => {
-      if (!Number.isInteger(idx)) {
-        throw new Error('[Error] The ' + idx ' index is not a number.');
-      }
-    });
-    indexs.forEach((index) => {
-      const block = blocks[index];
-      if (block !== undefined) {
-        blocks[index] = undefined;
-      } else {
-        throw new Error('[Error] The block to be deleted does not exist;no valid deletion has been performed.');
-      }
-    });
-  }
-
-  updateBlocks(place, blocks) {
-    if (typeof place !== 'string') {
-      throw new Error('[Error] The parameter place should be a string type.');
-    }
-    if (!Array.isArray(blocks)) {
-      throw new Error('[Error] The parameter blocks should be an array type.');
-    }
-    const {
-      data,
-    } = this;
-    const digital = data.gain(place);
-    const {
-      blocks: chunks,
-    } = digital;
-    if (chunks.length === 0) {
-      throw new Error('[Error] Blocks are currently empty,making update operations impossible.');
-    }
-    this.checkBlocksContent(blocks);
-    blocks.forEach(([type, index, range, data]) => {
-      chunks[index] = [type, range, data];
-    });
-  }
-
-  obtainCacheBlock(block, head, tail) {
-    if (typeof block === 'string') {
-      return block.substring(head, tail);
-    }
-    if (Buffer.isBuffer(block)) {
-      return block.subarray(head, tail);
+    if (Buffer.isBuffer(data)) {
+      return data.subarray(begin, end + 1);
     }
   }
 
@@ -255,8 +324,34 @@ class StorageCache {
       throw new Error('[Error] The end parameter of the ' + idx + ' range should be an integer type.');
     }
     if (start > end) {
-      throw new Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
+      throw :ew Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
     }
+  }
+
+  removeCacheBlock(block, begin, end) {
+    const range = [begin, end];
+    const { data, range: scope, } = block;
+    if (typeof block === 'string') {
+      const [left, right] = getComplement(scope, range);
+      block.data = data.substring(left, right + 1);
+    }
+    if (Buffer.isBuffer(block)) {
+      const [left, right] = getComplement(scope, range);
+      block.data = data.substring(left, right + 1);
+    }
+  }
+
+  removeGroupBlocks(place, ranges) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(ranges)) {
+      throw new Error('[Error] The parameter ranges should be an array type.');
+    }
+    const ans = [];
+    ranges.forEach((range) => {
+      this.removeBlocks(range);
+    });
   }
 
   removeBlocks(place, range) {
@@ -272,28 +367,30 @@ class StorageCache {
     } = this;
     const digital = data.gain(place);
     const {
+      range,
       blocks: chunks,
     } = digital;
-    const range = ranges[i];
     const [start, end] = range;
     const begin = start % blockSize;
-    if (end <= (begin * blockSize - 1)) {
-      ans.push(this.removeCacheStorage(block, begin, end));
+    const count = begin;
+    if (end <= ((begin + 1) * blockSize)) {
+      const chunk = chunks[begin];
+      this.removeCacheBlock(chunk, begin, end);
       continue;
     }
-    let ptr = begin;
+    let ptr = (begin + 1) * blockSize;
+    let count = begin + 1;
     while (true) {
       ptr += blockSize;
       if (ptr >= end) {
-        this.removeCacheStorage(block, ptr - blockSize, end);
+        const chunk = chunks[count];
+        this.removeCacheBlock(chunk, ptr - blockSize, end);
         break;
       } else {
-        this.removeCacheStoraage(block, ptr - blockSize, ptr);
+        const chunk = chunks[count];
+        this.removeCacheBlock(chunk, ptr - blockSize, ptr);
       }
     }
-  }
-
-  getCacheStorage(block, start, end) {
   }
 
   getBlocks(place, range) {
@@ -312,23 +409,28 @@ class StorageCache {
     } = this;
     const digital = data.gain(place);
     const {
+      range,
       blocks: chunks,
     } = digital;
     const [start, end] = range;
     const begin = start % blockSize;
     const ans = [];
-    if (end <= (begin * blockSize - 1)) {
-      ans.push(this.getCacheStorage(block, begin, end));
+    if (end <= ((begin + 1) * blockSize)) {
+      const { data, } = chunks[begin];
+      ans.push(this.getCacheData(data, begin, end));
       continue;
     }
-    let ptr = begin;
+    let ptr = (begin + 1) * blockSize;
+    let count = begin + 1;
     while (true) {
       ptr += blockSize;
+      count += 1;
+      const { data: block, } = chunks[count];
       if (ptr >= end) {
-        ans.push(this.getCacheStorage(block, ptr - blockSize, end));
+        ans.push(this.getCacheData(data, ptr - blockSize, end));
         break;
       } else {
-        ans.push(this.getCacheStorage(block, ptr - blockSize, ptr));
+        ans.push(this.getCacheData(data, ptr - blockSize, ptr));
       }
     }
     return ans;
