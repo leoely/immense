@@ -51,12 +51,19 @@ class StorageCache {
       cacheStats: true,
       cacheOwn: false,
       cacheMod: false,
+      cacheRealpath: false,
+      cacheDiskOccupy: true,
     };
     if (typeof options !== 'object' && options !== null) {
       throw new Error('[Error] The parameter options should be of type object.');
     }
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
+    const {
+      options: {
+        cacheDiskOccupy,
+      },
+    } = this;
     this.data = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
   }
 
@@ -81,16 +88,24 @@ class StorageCache {
     if (typeof cacheMod !== 'boolean') {
       throw new Error('[Error] The option cacheMod should be a boolean type.');
     }
+    if (typeof cacheRealpath !== 'boolean') {
+      throw new Error('[Error] The option cacheRealpath should be a boolean type.');
+    }
+    if (typeof cacheDiskOccupy !== 'boolean') {
+      throw new Error('[Error] The option cacheDiskOccupy should be a boolean type.');
+    }
   }
 
   changeOptions(place, options) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
+    place = this.getLinkPlace(place);
     if (typeof options !== 'object' && options !== null && !Array.isArray(options)) {
       throw new Error('[Error] The parameter options should be an object type.');
     }
     const {
+      options,
       data,
     } = this;
     this.checkNotNull(place);
@@ -102,6 +117,7 @@ class StorageCache {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
+    place = this.getLinkPlace(place);
     if (!(Number.isInteger(uid) && uid >= 0)) {
       throw new Error('[Error] The parameter uid should be an integer type.');
     }
@@ -113,6 +129,14 @@ class StorageCache {
     } = this;
     this.checkNotNull(place);
     const digital = data.gain(place);
+    const {
+      options: {
+        cacheOwn,
+      },
+    } = digital;
+    if (cacheOwn !== true) {
+      throw new Error('[Error] The current file does not have the option to enable cache own.');
+    }
     digital.own = [uid, gid];
   }
 
@@ -120,6 +144,7 @@ class StorageCache {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be an object type.');
     }
+    place = this.getLinkPlace(place);
     if (typeof options !== 'object' && options !== null && !Array.isArray(options)) {
       throw new Error('[Error] The stats options should be an object type.');
     }
@@ -128,13 +153,46 @@ class StorageCache {
     } = this;
     this.checkNotNull(place);
     const digital = data.gain(place);
+    const {
+      options: {
+        cacheStats,
+      },
+    } = digital;
+    if (cacheStats !== true) {
+      throw new Error('[Error] The current file does not have the option to enable cache stats.');
+    }
     digital.stats = stats;
+  }
+
+  updateRealpath(place, realpath) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be an object type.');
+    }
+    place = this.getLinkPlace(place);
+    if (typeof realpath !== 'string') {
+      throw new Error('[Error] The parameter realpath should be an object type.');
+    }
+    const {
+      data,
+    } = this;
+    this.checkNotNull(place);
+    const digital = data.gain(place);
+    const {
+      options: {
+        cacheRealpath,
+      },
+    } = digital;
+    if (cacheRealpath !== true) {
+      throw new Error('[Error] The current file does not have the option to enable cache realpath.');
+    }
+    digital.realpath = realpath;
   }
 
   updateMod(place, mod) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be an object type.');
     }
+    place = this.getLinkPlace(place);
     if (!(Number.isInteger(mod) && mod >= 0)) {
       throw new Error('[Error] The parameter mod should be an integer type.');
     }
@@ -143,7 +201,64 @@ class StorageCache {
     } = this;
     this.checkNotNull(place);
     const digital = data.gain(place);
+    const {
+      options: {
+        cacheMod,
+      },
+    } = digital;
+    if (cacheMod !== true) {
+      throw new Error('[Error] The current file does not have the option to enable cache mod.');
+    }
     digital.mod = mod;
+  }
+
+  updateDiskOccupy(place, diskOccupy) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be an object type.');
+    }
+    place = this.getLinkPlace(place);
+    if (!(Number.isInteger(diskOccupy) && diskOccupy >= 0)) {
+      throw new Error('[Error] The parameter diskOccupy should be an integer type.');
+    }
+    const {
+      data,
+    } = this;
+    this.checkNotNull(place);
+    const digital = data.gain(place);
+    const {
+      options: {
+        cacheMod,
+      },
+    } = digital;
+    if (cacheDiskOccupy !== true) {
+      throw new Error('[Error] The current file does not have the option to enable cache disk occupy.');
+    }
+    digital.diskOccupy = diskOccupy;
+  }
+
+  linkFile(sourcePlace, targetPlace) {
+    if (typeof sourcePlace !== 'string') {
+      throw new Error('[Error] The parameter sourcePlace should be a string type.');
+    }
+    if (typeof targetPlace !== 'string') {
+      throw new Error('[Error] The parameter targetPlace should be a string type.');
+    }
+    const {
+      data,
+    } = this;
+    data.attach(targetPlace, sourcePlace);
+  }
+
+  getLinkPlace(place) {
+    const {
+      data,
+    } = this;
+    const digital = data.gain(place);
+    if (typeof digital === 'string') {
+      return digital;
+    } else {
+      return place;
+    }
   }
 
   checkNotNull(place) {
@@ -161,6 +276,8 @@ class StorageCache {
           cacheStats,
           cacheOwn,
           cacheMod,
+          cacheRealpath,
+          cacheDiskOccupy,
         },
       } = this;
       if (cacheStats === true) {
@@ -171,6 +288,12 @@ class StorageCache {
       }
       if (cacheMode === true) {
         nullDigital[mod] = -1;
+      }
+      if (cacheRealpath === true) {
+        nullDigital[realpath] = '';
+      }
+      if (cacheDiskOccupy === true) {
+        nullDigital[diskOccupy] = '';
       }
       data.attach(place, nullDigital);
     }
@@ -216,6 +339,7 @@ class StorageCache {
       this.setCacheBlock(block, begin, end);
     }
     if (!interSection(range, scope)) {
+        block.range = [begin, end];
       this.setCacheBlock(block, begin, end);
     } else {
       const [left, right] = scope;
@@ -236,6 +360,15 @@ class StorageCache {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
+    if (dealPlace !== undefined) {
+      if (dealPlace !== 'boolean') {
+        throw new Error('[Error] The parameter dealPlace should be a boolean type.');
+      }
+    }
+    if (dealPlace !== false) {
+      place = this.getLinkPlace();
+    }
+    place = this.getLinkPlace(place);
     if (!Array.isArray(blocks)) {
       throw new Error('[Error] The parameter blocks should be an array type.');
     }
@@ -244,13 +377,13 @@ class StorageCache {
     }
     const {
       data,
-      options: {
-        blockSize,
-      },
     } = this;
     this.checkNotNull(place);
     const digital = data.gain(place);
     const {
+      options: {
+        blockSize,
+      },
       blocks: chunks,
     } = digital;
     this.checkBlocksContent(blocks);
@@ -277,15 +410,77 @@ class StorageCache {
     }
   }
 
+  addGroupBlocks(place, ranges, figures) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Array.isArray(ranges)) {
+      throw new Error('[Error] The parameter ranges should be an array type.');
+    }
+    if (!Array.isArray(figures)) {
+      throw new Error('[Error] The parameter figures should be an array type.');
+    }
+    if (ranges.length !== figures.length) {
+      throw new Error('[Error] The parameter ranges length shoule be equal to parameter figures.');
+    }
+    ranges.forEach((range, idx) => {
+      this.addBlock(place, range, figures[idx], false);
+    });
+  }
+
+  rename(place1, place2) {
+    if (typeof place1 !== 'string') {
+      throw new Error('[Error] The parameter place1 should be a string type.');
+    }
+    if (typeof place2 !== 'string') {
+      throw new Error('[Error] The parameter place1 should be a string type.');
+    }
+    this.checkNotNull(place1);
+    const {
+      data,
+    } = this;
+    data.exchange(place1, place2);
+  }
+
+  shrinkLength(place, length) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    place = this.getLinkPlace(place);
+    if (!Number.isInteger(length)) {
+      throw new Error('[Error] The parameter length should be an integer type.');
+    }
+    if (length > 0) {
+      throw new Error('[Error] The parameter length should be a positive integer.')
+    }
+    const {
+      data,
+    } = this;
+    const digital = data.gain(place);
+    const {
+      blocks: chunks,
+    } = digital;
+    blocks.forEach((block, idx) => {
+      const [type, index, range, data] = block;
+      const [left, right] = range;
+      if (left > length) {
+        blocks.splice(idx, 1);
+      } else if (inSection(length, range)) {
+        block.data = this.getCacheData(data, left, length);
+        block.range = [left, length];
+      }
+    });
+  }
+
   overlapBlocks(place, blocks) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
+    place = this.getLinkPlace(place);
     if (!Array.isArray(blocks)) {
       throw new Error('[Error] The parameter blocks should be an array type.');
     }
     const {
-      options,
       data,
     } = this;
     this.checkNotNull(place);
@@ -345,28 +540,37 @@ class StorageCache {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
+    place = this.getLinkPlace(place);
     if (!Array.isArray(ranges)) {
       throw new Error('[Error] The parameter ranges should be an array type.');
     }
     const ans = [];
     ranges.forEach((range) => {
-      this.removeBlocks(range);
+      this.removeBlocks(place, range, false);
     });
   }
 
-  removeBlocks(place, range) {
+  removeBlocks(place, range, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (dealPlace !== undefined) {
+      if (dealPlace !== 'boolean') {
+        throw new Error('[Error] The parameter dealPlace should be a boolean type.');
+      }
+    }
+    if (dealPlace !== false) {
+      place = this.getLinkPlace();
     }
     this.checkRangeContent(range);
     const {
       data,
-      options: {
-        blockSize,
-      },
     } = this;
     const digital = data.gain(place);
     const {
+      options: {
+        blockSize,
+      },
       range,
       blocks: chunks,
     } = digital;
@@ -393,22 +597,31 @@ class StorageCache {
     }
   }
 
-  getBlocks(place, range) {
+  getBlocks(place, range, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
+    if (dealPlace !== undefined) {
+      if (dealPlace !== 'boolean') {
+        throw new Error('[Error] The parameter dealPlace should be a boolean type.');
+      }
+    }
+    if (dealPlace !== false) {
+      place = this.getLinkPlace();
+    }
+    place = this.getLinkPlace(place);
     if (!Array.isArray(range)) {
       throw new Error('[Error] The parameter indexs should be an array type.');
     }
     this.checkRangeContent(range);
     const {
       data,
-      options: {
-        blockSize,
-      },
     } = this;
     const digital = data.gain(place);
     const {
+      options: {
+        blockSize,
+      },
       range,
       blocks: chunks,
     } = digital;
@@ -445,7 +658,7 @@ class StorageCache {
     }
     const ans = [];
     ranges.forEach((range) => {
-      ans.push(this.getBlocks(range));
+      ans.push(this.getBlocks(place, range, false));
     });
     return ans;
   }
