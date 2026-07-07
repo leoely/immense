@@ -10,7 +10,7 @@ function inSection(value, section) {
   }
 }
 
-function findInterSection(section1, section2) {
+function findInterSection(section1, section2, error) {
   const [left1, right1] = section1;
   const [left2, right2] = section2;
   if ((right2 >= left1) || (right1 >= left2)) {
@@ -18,7 +18,9 @@ function findInterSection(section1, section2) {
     const right = Math.min(right1, right2);
     return [left, right];
   }
-  throw new Error('[Error] The two sets have no intersection.');
+  if (error !== false) {
+    throw new Error('[Error] The two sets have no intersection.');
+  }
 }
 
 function getDifferenceSection(fullSection, removeSection) {
@@ -40,8 +42,10 @@ function getDifferenceSection(fullSection, removeSection) {
 }
 
 function getComplement(fullSection, removeSection) {
-  const interSection = findInterSection(fullSection, removeSection);
-  return getDifferenceSet(fullSection, interSection);
+  const interSection = findInterSection(fullSection, removeSection, false);
+  if (interSection !== undefined) {
+    return getDifferenceSet(fullSection, interSection);
+  }
 }
 
 function isNullSection(section) {
@@ -316,7 +320,7 @@ class StorageCache {
   }
 
   checkBlocksContent(blocks) {
-    blocks.forEach(([type, index, range, data], idx) => {
+    blocks.forEach(({ type, index, range, data}, idx) => {
       if (!Number.isInteger(type)) {
         throw new Error('[Error] The type parameter of the ' + idx + ' block should be an integer type.');
       }
@@ -349,7 +353,16 @@ class StorageCache {
     }
   }
 
-  setReverseBlock(block, ) {
+  setReverseBlock(block, kind, data, range) {
+    const [begin, end] = range;
+    switch (kind) {
+      case 0:
+        block.data = [block.data, this.getData(data, begin, end)];
+        break;
+      case 1:
+        block.data = [this.getData(data, begin, end), block.data];
+        break;
+    }
   }
 
   setInterBlock(block, data, type, inter, extend) {
@@ -367,15 +380,28 @@ class StorageCache {
       }
       block.data = charArray1.join('');
     }
+    const [head, tail] = extend;
     switch (type) {
       case 0:
+        if (Buffer.isBuffer(data)) {
+          block.data = data.subarray(head, tail + 1) + block.data;
+        }
+        if (typeof data === 'string') {
+          block.data = data.substring(head, tail + 1) + block.data;
+        }
         break;
       case 1:
+        if (Buffer.isBuffer(data)) {
+          block.data = block.data + data.subarray(head, tail + 1);
+        }
+        if (typeof data === 'string') {
+          block.data = block.data + data.substring(head, tail + 1);
+        }
         break;
     }
   }
 
-  addBlock(block, data, begin, end) {
+  addPositiveBlock(block, data, begin, end) {
     const [begin, end] = range;
     const { data, range: scope, } = block;
     if (data === undefined) {
@@ -390,7 +416,7 @@ class StorageCache {
         const [kind, span] = dealReverseSection(scope, range);
         block.type = 0;
         block.range = span;
-        this.setReverseBlock(block);
+        this.setReverseBlock(block, kind, data, range);
       }
     } else {
       const [left, right] = scope;
@@ -402,6 +428,44 @@ class StorageCache {
         block.range = [left, end];
         this.setInterBlock(block, data, 1, interSection, [right + 1, end]);
       }
+    }
+  }
+
+  addReverseBlock(block, data, begin, end, blockSize) {
+    const [begin, end] = range;
+    const { data, range: scope, } = block;
+    const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
+    const interSection1 = findInterSection(section1, range, false);
+    const interSection2 = findInterSection(section2, range, false);
+    if (interSection1 !== undefined && interSection2 !== undefined) {
+      block.type = 1;
+      block.range = [0, blockSize - 1];
+      const difference1Section = getDifferenceSection(section1, range);
+      const difference2Section = getDifferenceSection(section2, range);
+      block.data = Buffer.alloc(blockSize);
+      const [begin1, end1] = difference1Section;
+      const [begin2, end2] = difference2Section;
+      placeBlock(block, data[0], begin1, end1);
+      placeBlock(block, data[1], begin2, end2);
+    } else if (interSection1 !== undefined) {
+    } else if (interSection2 !== undefined) {
+    }
+  }
+
+  placeBlock(block, data, begin, end) {
+    const { data: digital, } = block;
+    if (Buffer.isBuffer(data)) {
+      for (let i = begin; i <= end; i += 1) {
+        digital[i] = data[i];
+      }
+    }
+    if (typeof data === 'string') {
+      const charArray1 = digital.split('');
+      const charArray2 = data.split('');
+      for (let i = begin; i <= end; i += 1) {
+        charArray1[i] = charArray2[i];
+      }
+      block.data = charArray1[i].join('');
     }
   }
 
@@ -441,7 +505,15 @@ class StorageCache {
     const count = begin;
     if (end <= ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
-      this.addBlock(chunk, digital, data, begin, end);
+      const { type, } = chunk;
+      switch (type) {
+        case 0:
+          this.addReverseBlock(chunk, digital, data, begin, end, blockSize);
+          break;
+        case 1:
+          this.addPositveBlock(chunk, digital, data, begin, end);
+          break;
+      }
       continue;
     }
     let ptr = (begin + 1) * blockSize;
@@ -450,11 +522,26 @@ class StorageCache {
       ptr += blockSize;
       if (ptr >= end) {
         const chunk = chunks[count];
-        this.addBlock(chunk, digital, data, ptr - blockSize, end);
+        const { type, } = chunk;
+        switch (type) {
+          case 0:
+            this.addReverseBlock(chunk, digital, data, ptr - blockSize, end, blockSize);
+            break;
+          case 1:
+            this.addPositiveBlock(chunk, digital, data, ptr - blockSize, end);
+            break;
+        }
         break;
       } else {
         const chunk = chunks[count];
-        this.addBlock(chunk, digital, data, ptr - blockSize, ptr);
+        switch (type) {
+          case 0:
+            this.addReverseBlock(chunk, digital, data, ptr - blockSize, ptr, blockSize);
+            break;
+          case 1:
+            this.addPositiveBlock(chunk, digital, data, ptr - blockSize, ptr);
+            break;
+        }
       }
     }
   }
@@ -548,6 +635,7 @@ class StorageCache {
   }
 
   getBlock(block, begin, end) {
+    const { data, } = block;
     if (typeof data === 'string') {
       return data.substring(begin, end + 1);
     }
@@ -643,6 +731,15 @@ class StorageCache {
         const chunk = chunks[count];
         this.removeBlock(chunk, ptr - blockSize, ptr);
       }
+    }
+  }
+
+  getData(data, begin, end) {
+    if (typeof data === 'string') {
+      return data.substring(begin, end + 1);
+    }
+    if (Buffer.isBuffer(data)) {
+      return data.subarray(begin, end + 1);
     }
   }
 
