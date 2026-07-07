@@ -44,6 +44,25 @@ function getComplement(fullSection, removeSection) {
   return getDifferenceSet(fullSection, interSection);
 }
 
+function isNullSection(section) {
+  const [left, right] = section;
+  if (left === right) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function dealReverseSection(section1, section2) {
+  const [l1, r1] = section1;
+  const [l2, r2] = section2;
+  if (r1 < l2) {
+    return [1, [r1 + 1, l2 - 1]];
+  } else {
+    return [0, [r2 + 1, l1 - 1]];
+  }
+}
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -59,11 +78,6 @@ class StorageCache {
     }
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
-    const {
-      options: {
-        cacheDiskOccupy,
-      },
-    } = this;
     this.data = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
   }
 
@@ -74,6 +88,8 @@ class StorageCache {
         cacheStats,
         cacheOwn,
         cacheMod,
+        cacheRealpath,
+        cacheDiskOccupy,
       },
     } = this;
     if (!Number.isInteger(blockSize)) {
@@ -293,7 +309,7 @@ class StorageCache {
         nullDigital[realpath] = '';
       }
       if (cacheDiskOccupy === true) {
-        nullDigital[diskOccupy] = '';
+        nullDigital[diskOccupy] = -1;
       }
       data.attach(place, nullDigital);
     }
@@ -323,7 +339,8 @@ class StorageCache {
     });
   }
 
-  setCacheBlock(block, begin, end) {
+  setBlock(block, data, begin, end) {
+    const { data, type, } = block;
     if (typeof data === 'string') {
       block.data = data.substring(begin, end + 1);
     }
@@ -332,26 +349,58 @@ class StorageCache {
     }
   }
 
-  addCacheBlock(block, data, begin, end) {
+  setReverseBlock(block, ) {
+  }
+
+  setInterBlock(block, data, type, inter, extend) {
+    const [left, right] = inter;
+    if (Buffer.isBuffer(data)) {
+      for (let i = left; i <= right; i += 1) {
+        block.data[i] = data[i];
+      }
+    }
+    if (typeof data === 'string') {
+      const charArray1 = block.data.split('');
+      const charArray2 = data.split('');
+      for (let i = left; i <= right; i += 1) {
+        charArray1[i] = charArray2[i];
+      }
+      block.data = charArray1.join('');
+    }
+    switch (type) {
+      case 0:
+        break;
+      case 1:
+        break;
+    }
+  }
+
+  addBlock(block, data, begin, end) {
     const [begin, end] = range;
     const { data, range: scope, } = block;
     if (data === undefined) {
+      block.range = [begin, end];
       this.setCacheBlock(block, begin, end);
     }
     if (!interSection(range, scope)) {
+      if (isBareSection(scope)) {
         block.range = [begin, end];
-      this.setCacheBlock(block, begin, end);
+        this.setBlock(block, data, begin, end);
+      } else {
+        const [kind, span] = dealReverseSection(scope, range);
+        block.type = 0;
+        block.range = span;
+        this.setReverseBlock(block);
+      }
     } else {
       const [left, right] = scope;
-      if (begin <= left && right >= end) {
-        block.range = [begin, end];
-        this.setCacheBlock(block, begin, end);
-      } else if (begin <= left) {
+      const interSection = findInterSection(scope, range);
+      if (begin <= left) {
         block.range = [begin, right];
-        this.setCacheBlock(block, begin, end);
-      } else if (right >= end) {
+        this.setInterBlock(block, data, 0, interSection, [begin, right + 1]);
+      } else if (end >= right) {
         block.range = [left, end];
-        this.setCacheBlock(block, left, end);
+        this.setInterBlock(block, data, 1, interSection, [right + 1, end]);
       }
     }
   }
@@ -392,7 +441,7 @@ class StorageCache {
     const count = begin;
     if (end <= ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
-      this.addCacheBlock(chunk, data, begin, end);
+      this.addBlock(chunk, digital, data, begin, end);
       continue;
     }
     let ptr = (begin + 1) * blockSize;
@@ -401,11 +450,11 @@ class StorageCache {
       ptr += blockSize;
       if (ptr >= end) {
         const chunk = chunks[count];
-        this.addCacheBlock(chunk, data, ptr - blockSize, end);
+        this.addBlock(chunk, digital, data, ptr - blockSize, end);
         break;
       } else {
         const chunk = chunks[count];
-        this.addCacheBlock(chunk, data, ptr - blockSize, ptr);
+        this.addBlock(chunk, digital, data, ptr - blockSize, ptr);
       }
     }
   }
@@ -466,7 +515,7 @@ class StorageCache {
       if (left > length) {
         blocks.splice(idx, 1);
       } else if (inSection(length, range)) {
-        block.data = this.getCacheData(data, left, length);
+        block.data = this.getData(data, left, length);
         block.range = [left, length];
       }
     });
@@ -494,11 +543,11 @@ class StorageCache {
       if (chunk === undefined) {
         throw new Error('[Error] The previous block does not exist,confirming the operation was correct.');
       }
-      chunks[index] = [type, range, data];
+      chunks[index] = { type: 1, range, data, };
     });
   }
 
-  getCacheData(data, begin, end) {
+  getBlock(block, begin, end) {
     if (typeof data === 'string') {
       return data.substring(begin, end + 1);
     }
@@ -523,7 +572,7 @@ class StorageCache {
     }
   }
 
-  removeCacheBlock(block, begin, end) {
+  removeBlock(block, begin, end) {
     const range = [begin, end];
     const { data, range: scope, } = block;
     if (typeof block === 'string') {
@@ -579,7 +628,7 @@ class StorageCache {
     const count = begin;
     if (end <= ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
-      this.removeCacheBlock(chunk, begin, end);
+      this.removeBlock(chunk, begin, end);
       continue;
     }
     let ptr = (begin + 1) * blockSize;
@@ -588,11 +637,11 @@ class StorageCache {
       ptr += blockSize;
       if (ptr >= end) {
         const chunk = chunks[count];
-        this.removeCacheBlock(chunk, ptr - blockSize, end);
+        this.removeBlock(chunk, ptr - blockSize, end);
         break;
       } else {
         const chunk = chunks[count];
-        this.removeCacheBlock(chunk, ptr - blockSize, ptr);
+        this.removeBlock(chunk, ptr - blockSize, ptr);
       }
     }
   }
@@ -630,7 +679,7 @@ class StorageCache {
     const ans = [];
     if (end <= ((begin + 1) * blockSize)) {
       const { data, } = chunks[begin];
-      ans.push(this.getCacheData(data, begin, end));
+      ans.push(this.getBlock(data, begin, end));
       continue;
     }
     let ptr = (begin + 1) * blockSize;
@@ -640,10 +689,10 @@ class StorageCache {
       count += 1;
       const { data: block, } = chunks[count];
       if (ptr >= end) {
-        ans.push(this.getCacheData(data, ptr - blockSize, end));
+        ans.push(this.getData(data, ptr - blockSize, end));
         break;
       } else {
-        ans.push(this.getCacheData(data, ptr - blockSize, ptr));
+        ans.push(this.getData(data, ptr - blockSize, ptr));
       }
     }
     return ans;
