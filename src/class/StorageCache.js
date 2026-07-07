@@ -345,40 +345,79 @@ class StorageCache {
 
   setBlock(block, data, begin, end) {
     const { data, type, } = block;
-    if (typeof data === 'string') {
-      block.data = data.substring(begin, end + 1);
-    }
-    if (Buffer.isBuffer(data)) {
-      block.data = data.subarray(begin, end + 1);
+    if (begin === 0) {
+      if (typeof data === 'string') {
+        block.data = data.substring(begin, end + 1);
+      }
+      if (Buffer.isBuffer(data)) {
+        block.data = data.subarray(begin, end + 1);
+      }
+    } else {
+      const offset = data.length + 1;
+      if (typeof data === 'string') {
+        block.data = data.substring(begin - offset, end + 1 - offset);
+      }
+      if (Buffer.isBuffer(data)) {
+        block.data = data.subarray(begin - offset, end + 1 - offset);
+      }
     }
   }
 
   setReverseBlock(block, kind, data, range) {
     const [begin, end] = range;
-    switch (kind) {
-      case 0:
-        block.data = [block.data, this.getData(data, begin, end)];
-        break;
-      case 1:
-        block.data = [this.getData(data, begin, end), block.data];
-        break;
+    if (begin === 0) {
+      switch (kind) {
+        case 0:
+          block.data = [block.data, this.getData(data, begin, end)];
+          break;
+        case 1:
+          block.data = [this.getData(data, begin, end), block.data];
+          break;
+      }
+    } else {
+      const offset = data.length + 1;
+      switch (kind) {
+        case 0:
+          block.data = [block.data, this.getData(data, begin - offset, end + 1 - offset)];
+          break;
+        case 1:
+          block.data = [this.getData(data, begin - offset, end + 1 - offset), block.data];
+          break;
+      }
     }
   }
 
   setInterBlock(block, data, type, inter, extend) {
     const [left, right] = inter;
-    if (Buffer.isBuffer(data)) {
-      for (let i = left; i <= right; i += 1) {
-        block.data[i] = data[i];
+    if (left === 0) {
+      if (Buffer.isBuffer(data)) {
+        for (let i = left; i <= right; i += 1) {
+          block.data[i] = data[i];
+        }
       }
-    }
-    if (typeof data === 'string') {
-      const charArray1 = block.data.split('');
-      const charArray2 = data.split('');
-      for (let i = left; i <= right; i += 1) {
-        charArray1[i] = charArray2[i];
+      if (typeof data === 'string') {
+        const charArray1 = block.data.split('');
+        const charArray2 = data.split('');
+        for (let i = left; i <= right; i += 1) {
+          charArray1[i] = charArray2[i];
+        }
+        block.data = charArray1.join('');
       }
-      block.data = charArray1.join('');
+    } else {
+      const offset = data.length - 1;
+      if (Buffer.isBuffer(data)) {
+        for (let i = left - offset; i <= right - offset; i += 1) {
+          block.data[i] = data[i];
+        }
+      }
+      if (typeof data === 'string') {
+        const charArray1 = block.data.split('');
+        const charArray2 = data.split('');
+        for (let i = left - offset; i <= right - offset; i += 1) {
+          charArray1[i] = charArray2[i];
+        }
+        block.data = charArray1.join('');
+      }
     }
     const [head, tail] = extend;
     switch (type) {
@@ -406,7 +445,7 @@ class StorageCache {
     const { data, range: scope, } = block;
     if (data === undefined) {
       block.range = [begin, end];
-      this.setCacheBlock(block, begin, end);
+      this.setBlock(block, begin, end);
     }
     if (!interSection(range, scope)) {
       if (isBareSection(scope)) {
@@ -433,7 +472,7 @@ class StorageCache {
 
   addReverseBlock(block, data, begin, end, blockSize) {
     const [begin, end] = range;
-    const { data, range: scope, } = block;
+    const { data: digital, range: scope, } = block;
     const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
     const interSection1 = findInterSection(section1, range, false);
     const interSection2 = findInterSection(section2, range, false);
@@ -445,27 +484,57 @@ class StorageCache {
       block.data = Buffer.alloc(blockSize);
       const [begin1, end1] = difference1Section;
       const [begin2, end2] = difference2Section;
-      placeBlock(block, data[0], begin1, end1);
-      placeBlock(block, data[1], begin2, end2);
+      placeBlock(block, digital[0], begin1, end1);
+      placeBlock(block, digital[1], begin2, end2);
+      placeBlock(block, data, begin, end);
     } else if (interSection1 !== undefined) {
+      block.range = [0, end];
+      const difference1Section = getDifferenceSection(section1, range);
+      block.data = Buffer.alloc(end);
+      const [begin1, end1] = difference1Section;
+      placeBlock(block, digital[0], begin1, end1);
+      placeBlock(block, data, begin, end);
     } else if (interSection2 !== undefined) {
+      block.range = [start, blockSize - 1];
+      const difference1Section = getDifferenceSection(section2, range);
+      block.data = Buffer.alloc(blockSize - 1 - start);
+      const [begin2, end2] = difference2Section;
+      placeBlock(block, digital[1], begin2, end2);
+      placeBlock(block, data, begin, end);
     }
   }
 
   placeBlock(block, data, begin, end) {
     const { data: digital, } = block;
-    if (Buffer.isBuffer(data)) {
-      for (let i = begin; i <= end; i += 1) {
-        digital[i] = data[i];
+    if (begin === 0) {
+      if (Buffer.isBuffer(data)) {
+        for (let i = begin; i <= end; i += 1) {
+          digital[i] = data[i];
+        }
       }
-    }
-    if (typeof data === 'string') {
-      const charArray1 = digital.split('');
-      const charArray2 = data.split('');
-      for (let i = begin; i <= end; i += 1) {
-        charArray1[i] = charArray2[i];
+      if (typeof data === 'string') {
+        const charArray1 = digital.split('');
+        const charArray2 = data.split('');
+        for (let i = begin; i <= end; i += 1) {
+          charArray1[i] = charArray2[i];
+        }
+        block.data = charArray1[i].join('');
       }
-      block.data = charArray1[i].join('');
+    } else {
+      const offset = data.length + 1;
+      if (Buffer.isBuffer(data)) {
+        for (let i = begin - offset; i <= end - offset; i += 1) {
+          digital[i] = data[i];
+        }
+      }
+      if (typeof data === 'string') {
+        const charArray1 = digital.split('');
+        const charArray2 = data.split('');
+        for (let i = begin - offset; i <= end - offset; i += 1) {
+          charArray1[i] = charArray2[i];
+        }
+        block.data = charArray1[i].join('');
+      }
     }
   }
 
@@ -636,11 +705,21 @@ class StorageCache {
 
   getBlock(block, begin, end) {
     const { data, } = block;
-    if (typeof data === 'string') {
-      return data.substring(begin, end + 1);
-    }
-    if (Buffer.isBuffer(data)) {
-      return data.subarray(begin, end + 1);
+    if (begin === 0) {
+      if (typeof data === 'string') {
+        return data.substring(begin, end + 1);
+      }
+      if (Buffer.isBuffer(data)) {
+        return data.subarray(begin, end + 1);
+      }
+    } else {
+      const offset = data.length + 1;
+      if (typeof data === 'string') {
+        return data.substring(begin - offset, end + 1 - offset);
+      }
+      if (Buffer.isBuffer(data)) {
+        return data.subarray(begin - offset, end + 1 - offset);
+      }
     }
   }
 
@@ -661,15 +740,29 @@ class StorageCache {
   }
 
   removeBlock(block, begin, end) {
-    const range = [begin, end];
-    const { data, range: scope, } = block;
-    if (typeof block === 'string') {
-      const [left, right] = getComplement(scope, range);
-      block.data = data.substring(left, right + 1);
-    }
-    if (Buffer.isBuffer(block)) {
-      const [left, right] = getComplement(scope, range);
-      block.data = data.substring(left, right + 1);
+    if (begin === 0) {
+      const range = [begin, end];
+      const { data, range: scope, } = block;
+      if (typeof block === 'string') {
+        const [left, right] = getComplement(scope, range);
+        block.data = data.substring(left, right + 1);
+      }
+      if (Buffer.isBuffer(block)) {
+        const [left, right] = getComplement(scope, range);
+        block.data = data.substring(left, right + 1);
+      }
+    } else {
+      const offset = data.length + 1;
+      const range = [begin, end];
+      const { data, range: scope, } = block;
+      if (typeof block === 'string') {
+        const [left, right] = getComplement(scope, range);
+        block.data = data.substring(left - offset, right + 1 - offset);
+      }
+      if (Buffer.isBuffer(block)) {
+        const [left, right] = getComplement(scope, range);
+        block.data = data.substring(left - offset, right + 1 - offset);
+      }
     }
   }
 
@@ -735,11 +828,21 @@ class StorageCache {
   }
 
   getData(data, begin, end) {
-    if (typeof data === 'string') {
-      return data.substring(begin, end + 1);
-    }
-    if (Buffer.isBuffer(data)) {
-      return data.subarray(begin, end + 1);
+    if (begin === 0) {
+      if (typeof data === 'string') {
+        return data.substring(begin, end + 1);
+      }
+      if (Buffer.isBuffer(data)) {
+        return data.subarray(begin, end + 1);
+      }
+    } else {
+      const offset = data.length + 1;
+      if (typeof data === 'string') {
+        return data.substring(begin - offset, end + 1 - offset);
+      }
+      if (Buffer.isBuffer(data)) {
+        return data.subarray(begin - offset, end + 1 - offset);
+      }
     }
   }
 
