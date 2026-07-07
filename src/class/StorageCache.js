@@ -1,5 +1,16 @@
+import EventEmitter from 'events';
 import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
+
+function getBetweenLength(section1, section2) {
+  const [l1, r1] = sectinon1;
+  const [l2, r2] = sectinon2;
+  if (l2 >= r1) {
+    return l2 - r1;
+  } else if (l1 >= r2) {
+    return l1 - r2;
+  }
+}
 
 function inSection(value, section) {
   const [left, right] = section;
@@ -82,6 +93,8 @@ class StorageCache {
     }
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
+    this.getEventEmitter = false;
+    this.eventEmitter = new EventEmitter();
     this.data = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
   }
 
@@ -114,6 +127,10 @@ class StorageCache {
     if (typeof cacheDiskOccupy !== 'boolean') {
       throw new Error('[Error] The option cacheDiskOccupy should be a boolean type.');
     }
+  }
+
+  getEventEmitter() {
+    return this.eventEmitter;
   }
 
   changeOptions(place, options) {
@@ -471,7 +488,7 @@ class StorageCache {
   }
 
   addReverseBlock(block, data, begin, end, blockSize) {
-    const [begin, end] = range;
+    const [left, right] = range;
     const { data: digital, range: scope, } = block;
     const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
     const interSection1 = findInterSection(section1, range, false);
@@ -484,36 +501,72 @@ class StorageCache {
       block.data = Buffer.alloc(blockSize);
       const [begin1, end1] = difference1Section;
       const [begin2, end2] = difference2Section;
-      placeBlock(block, digital[0], begin1, end1);
-      placeBlock(block, digital[1], begin2, end2);
-      placeBlock(block, data, begin, end);
+      this.placeBlock(block, digital[0], begin1, end1);
+      this.placeBlock(block, digital[1], begin2, end2);
+      this.placeBlock(block, data, begin, end);
     } else if (interSection1 !== undefined) {
-      block.range = [0, end];
-      const difference1Section = getDifferenceSection(section1, range);
-      block.data = Buffer.alloc(end);
-      const [begin1, end1] = difference1Section;
-      placeBlock(block, digital[0], begin1, end1);
-      placeBlock(block, data, begin, end);
+      const max = Math.max(left, end);
+      if (max === end) {
+        block.range = [max + 1, right];
+        block.data[0] = Buffer.alloc(max);
+        const difference1Section = getDifferenceSection(section1, range);
+        const [begin1, end1] = difference1Section;
+        this.placeBlock(block, digital[0], 0, begin1, end1);
+        this.placeBlock(block, data, 0, end1 + 1, max);
+      } else {
+        this.setBlock(block, data, begin, end);
+      }
     } else if (interSection2 !== undefined) {
-      block.range = [start, blockSize - 1];
-      const difference1Section = getDifferenceSection(section2, range);
-      block.data = Buffer.alloc(blockSize - 1 - start);
-      const [begin2, end2] = difference2Section;
-      placeBlock(block, digital[1], begin2, end2);
-      placeBlock(block, data, begin, end);
+      if (min === start) {
+        const min = Math.min(right, start);
+        block.range = [left, min + 1];
+        const difference1Section = getDifferenceSection(section2, range);
+        block.data[1] = Buffer.alloc(blockSize - 1 - min);
+        const [begin1, end1] = difference2Section;
+        this.placeBlock(block, digital[1], 1, begin1, end1);
+        this.placeBlock(block, data, 1, min, end1 + 1);
+      } else {
+        this.setBlock(block, data, begin, end);
+      }
+    } else {
+      const length1 = getBetweenLength(section1, range);
+      const length2 = getBetweenLength(range, section2);
+      const { eventEmitter, } = this;
+      if (length1 <= length2) {
+        const fillSection = [right + 1, right + 1 + length];
+        block.range = [end + 1, right];
+        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
+        let figure;
+        eventEmitter.on('giveData', (data) => figure = data);
+        if (figure === undefined) {
+          throw new Error('[Error] The process of processing the fill data was omitted.')
+        }
+        this.placeBlock(block, figure, 0, , end1 + 1);
+      } else {
+        const fillSection = [left + 1 - length, left + 1];
+        block.range = [end + 1, right];
+        block.range = [left, begin + 1];
+        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
+        let figure;
+        eventEmitter.on('giveData', (data) => figure = data);
+        if (figure === undefined) {
+          throw new Error('[Error] The process of processing the fill data was omitted.')
+        }
+        this.placeBlock(block, figure, 1, fillSection[0], fillSection[1]);
+      }
     }
   }
 
-  placeBlock(block, data, begin, end) {
+  placeBlock(block, data, type, begin, end) {
     const { data: digital, } = block;
     if (begin === 0) {
       if (Buffer.isBuffer(data)) {
         for (let i = begin; i <= end; i += 1) {
-          digital[i] = data[i];
+          digital[type][i] = data[i];
         }
       }
       if (typeof data === 'string') {
-        const charArray1 = digital.split('');
+        const charArray1 = digital[type].split('');
         const charArray2 = data.split('');
         for (let i = begin; i <= end; i += 1) {
           charArray1[i] = charArray2[i];
@@ -523,12 +576,13 @@ class StorageCache {
     } else {
       const offset = data.length + 1;
       if (Buffer.isBuffer(data)) {
+        const figure = digital[type];
         for (let i = begin - offset; i <= end - offset; i += 1) {
-          digital[i] = data[i];
+          figure[i] = data[i];
         }
       }
       if (typeof data === 'string') {
-        const charArray1 = digital.split('');
+        const charArray1 = digital[type].split('');
         const charArray2 = data.split('');
         for (let i = begin - offset; i <= end - offset; i += 1) {
           charArray1[i] = charArray2[i];
@@ -629,7 +683,7 @@ class StorageCache {
       throw new Error('[Error] The parameter ranges length shoule be equal to parameter figures.');
     }
     ranges.forEach((range, idx) => {
-      this.addBlock(place, range, figures[idx], false);
+      this.addBlocks(place, range, figures[idx], false);
     });
   }
 
