@@ -87,11 +87,11 @@ class StorageCache {
   constructor(options) {
     const defaultOptions = {
       blockSize: 2048,
-      cacheStats: true,
+      cacheStats: false,
       cacheOwn: false,
       cacheMod: false,
       cacheRealpath: false,
-      cacheDiskOccupy: true,
+      cacheDiskOccupy: false,
     };
     if (typeof options !== 'object' && options !== null) {
       throw new Error('[Error] The parameter options should be of type object.');
@@ -373,7 +373,7 @@ class StorageCache {
   }
 
   checkBlocksContent(blocks) {
-    blocks.forEach(({ type, index, range, data}, idx) => {
+    blocks.forEach(({ type, index, range, data, }, idx) => {
       if (!Number.isInteger(type)) {
         throw new Error('[Error] The type parameter of the ' + idx + ' block should be an integer type.');
       }
@@ -458,14 +458,10 @@ class StorageCache {
     if (begin === 0) {
       switch (kind) {
         case 0: {
-          const beginPos = this.getBlockPostion(begin);
-          const endPos = this.getBlockPosition(end);
-          block.data = [block.data, this.getData(data, beginPos, endPos)];
+          block.data = [block.data, this.getData(data, begin, end)];
           break;
         }
         case 1: {
-          const beginPos = this.getBlockPosition(begin);
-          const endPos = this.getBlockPostion(end);
           block.data = [this.getData(data, begin, end), block.data];
           break;
         }
@@ -704,7 +700,19 @@ class StorageCache {
     const [start, end] = range;
     const begin = Math.floor(start / blockSize);
     const count = begin;
-    if (end <= ((begin + 1) * blockSize)) {
+    if (end < ((begin + 1) * blockSize)) {
+      const chunk = chunks[begin];
+      const { type, } = chunk;
+      switch (type) {
+        case 0:
+          this.addReverseBlock(chunk, digital, data, begin, end);
+          break;
+        case 1:
+          this.addPositveBlock(chunk, digital, data, begin, blockSize - 1);
+          break;
+      }
+      continue;
+    } else {
       const chunk = chunks[begin];
       const { type, } = chunk;
       switch (type) {
@@ -850,9 +858,9 @@ class StorageCache {
     }
   }
 
-  removeEndBlock(block, begin, end) {
+  removeSingleEndBlock(block, begin, end) {
     const { range: scope, } = block;
-    const [left, right] = range;
+    const [begin, end] = range;
     const {
       options: {
         blockSize,
@@ -864,7 +872,8 @@ class StorageCache {
       const [left, right] = region;
       this.setBlock(block, data, left, right);
     } else if (right === blockSize - 1) {
-      blocks[index] = undefined;
+      block.type = 2;
+      block.range = [left, right];
     } else {
       const region = getComplement(scope, range);
       const length = getSectionLength(region);
@@ -893,7 +902,8 @@ class StorageCache {
       this.setBlock(block, data, left, right);
       block.range = region;
     } else if (left === 0) {
-      blocks[index] = undefined;
+      block.type = 2;
+      block.range = [left, right];
     } else {
       const region = getComplement(scope, range);
       const length = getSectionLength(region);
@@ -925,12 +935,35 @@ class StorageCache {
     switch (type) {
       case 0: {
         const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
-        this.remove(block, section1);
-        this.remove(block, section2);
+        this.removeSingleBeginBlock(block, section1);
+        this.removeSingleBeginBlock(block, section2);
         break;
       }
       case 1: {
         this.removeSingleBeginBlock(block, range);
+        break;
+      }
+    }
+  }
+
+  removeEndBlock(blocks, index, begin, end) {
+    const {
+      options: {
+        blockSize,
+      },
+    } = this;
+    const range = [begin, end];
+    const block = blocks[index];
+    const { type, range: scope, data, } = block;
+    switch (type) {
+      case 0: {
+        const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
+        this.removeSingleEndBlock(block, section1);
+        this.removeSingleEndBlock(block, section2);
+        break;
+      }
+      case 1: {
+        this.removeSingleEndBlock(block, range);
         break;
       }
     }
@@ -975,9 +1008,17 @@ class StorageCache {
     const [start, end] = range;
     const begin = Math.floor(start / blockSize);
     const count = begin;
-    if (end <= ((begin + 1) * blockSize)) {
+    if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       this.removeBeginBlock(chunks, begin, begin, end);
+      continue;
+    } else {
+      const chunk = chunks[begin];
+      if (start === 0) {
+        this.removeBeginBlock(chunk, start, (begin + 1) * blockSize);
+      } else {
+        this.removeBeginBlock(chunk, start, (begin + 1) * blockSize);
+      }
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -1008,7 +1049,7 @@ class StorageCache {
     });
   }
 
-  getMiddleBlock(block, begin, end) {
+  getFullBlock(block, begin, end) {
     const { data, type, } = block;
     if (begin === 0) {
       if (typeof data === 'string') {
@@ -1059,9 +1100,12 @@ class StorageCache {
     const [start, end] = range;
     const begin = Math.floor(start / blockSize);
     const ans = [];
-    if (end <= ((begin + 1) * blockSize)) {
+    if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       ans.push(this.getBeginBlock(chunk, begin, end));
+      continue;
+    } else {
+      ans.push(this.getBeginBlock(chunk, (begin + 1) * blockSize));
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -1073,7 +1117,7 @@ class StorageCache {
         ans.push(this.getEndBlock(chunk, ptr - blockSize, end));
         break;
       } else {
-        ans.push(this.getMiddleBlock(chunk, ptr - blockSize, ptr));
+        ans.push(this.getFullBlock(chunk, ptr - blockSize, ptr));
       }
     }
     return ans;
