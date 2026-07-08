@@ -78,6 +78,11 @@ function dealReverseSection(section1, section2) {
   }
 }
 
+function getSectionLength(section) {
+  const [left, right] = section;
+  return right - left + 1;
+}
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -391,8 +396,45 @@ class StorageCache {
     });
   }
 
+  adjunctionBlock(block, data, begin, end) {
+    const { data, type, range: scope, } = block;
+    if (begin === 0) {
+      if (typeof data === 'string') {
+        block.data = data + block.data;
+      }
+      if (Buffer.isBuffer(data)) {
+        block.data = Buffer.concat(data, block.data);
+      }
+    } else {
+      if (typeof data === 'string') {
+        block.data = data + block.data;
+      }
+      if (Buffer.isBuffer(data)) {
+        block.data = Buffer.concat(data, block.data);
+      }
+    }
+  }
+
   setBlock(block, data, begin, end) {
-    const { data, type, } = block;
+    const range = [begin, end];
+    const { data, type, range: scope, } = block;
+    const region = getComplement(range, scope);
+    if (getSectionLength(region) > 0) {
+      const [left, right] = region;
+      const {
+        options: {
+          blockSize,
+        },
+      }
+      let figure;
+      eventEmitter.on('giveData', (data) => figure = data);
+      eventEmitter.emit('requestData', left, right);
+      if (figure === undefined) {
+        throw new Error('[Error] The process of processing the fill data was omitted.')
+      }
+      this.adjunctionBlock(block, data, left, right);
+      this.fillNumber += 1;
+    }
     if (begin === 0) {
       if (typeof data === 'string') {
         block.data = data.substring(begin, end + 1);
@@ -498,10 +540,6 @@ class StorageCache {
   addPositiveBlock(block, data, begin, end) {
     const [begin, end] = range;
     const { data, range: scope, } = block;
-    if (data === undefined) {
-      block.range = [begin, end];
-      this.setBlock(block, begin, end);
-    }
     if (!interSection(range, scope)) {
       if (isBareSection(scope)) {
         block.range = [begin, end];
@@ -664,20 +702,19 @@ class StorageCache {
     } = digital;
     this.checkBlocksContent(blocks);
     const [start, end] = range;
-    const begin = start % blockSize;
+    const begin = Math.floor(start / blockSize);
     const count = begin;
     if (end <= ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       const { type, } = chunk;
       switch (type) {
         case 0:
-          this.addReverseBlock(chunk, digital, data, begin, end, blockSize);
+          this.addReverseBlock(chunk, digital, data, begin, blockSize - 1);
           break;
         case 1:
-          this.addPositveBlock(chunk, digital, data, begin, end);
+          this.addPositveBlock(chunk, digital, data, begin, blockSize - 1);
           break;
       }
-      continue;
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -822,63 +859,38 @@ class StorageCache {
         blockSize,
       },
     } = this;
+    const range = [begin, end];
     const block = blocks[index];
-    if (begin === 0) {
-      const range = [begin, end];
-      const { data, range: scope, } = block;
-      if (typeof block === 'string') {
-        const [left, right] = getComplement(scope, range);
-        if ((left === 0) || (right === blockSize - 1)) {
-          blocks[index] = undefined;
-        } else {
-          block.type = 0;
-          block.range = [left, right];
-          block.data = [];
-          const { data: digital, } = block;
-          digital[0] = data.substring(0, left);
-          digital[1] = data.substing(right + 1, blockSize);
-        }
+    const { type, range: scope, data, } = block;
+    switch (type) {
+      case 0: {
+        break;
       }
-      if (Buffer.isBuffer(block)) {
-        const [left, right] = getComplement(scope, range);
-        if ((left === 0) || (right === blockSize - 1)) {
+      case 1: {
+        const [left, right] = range;
+        if (left === 0 && right === blockSize - 1) {
+          const region = getComplement(scope, range);
+          block.range = region;
+        } else if (left === 0) {
           blocks[index] = undefined;
         } else {
-          block.type = 0;
-          block.range = [left, right];
-          block.data = [];
-          const { data: digital, } = block;
-          digital[0] = data.subarray(0, left);
-          digital[1] = data.subarray(right + 1, blockSize);
+          const region = getComplement(scope, range);
+          const length = getSectionLength(region);
+          if (length === 0) {
+            blocks[index] = undefined;
+          } else {
+            block.range = region;
+            const [left, right] = region;
+            const offset = this.getOffset(data);
+            if (typeof block === 'string') {
+              block.data = data.substring(left - offset, right + 1 - offset);
+            }
+            if (Buffer.isBuffer(block)) {
+              block.data = data.subarray(left - offset, right + 1 - offset);
+            }
+          }
         }
-      }
-    } else {
-      const offset = this.getOffset(data);
-      const range = [begin, end];
-      const { data, range: scope, } = block;
-      if (typeof block === 'string') {
-        if ((left === 0) || (right === blockSize - 1)) {
-          blocks[index] = undefined;
-        } else {
-          block.type = 0;
-          block.range = [left, right];
-          block.data = [];
-          const { data: digital, } = block;
-          digital[0] = data.substring(0, left);
-          digital[1] = data.substring(right + 1 - offset, blockSize - offset);
-        }
-      }
-      if (Buffer.isBuffer(block)) {
-        if ((left === 0) || (right === blockSize - 1)) {
-          blocks[index] = undefined;
-        } else {
-          block.type = 0;
-          block.range = [left, right];
-          block.data = [];
-          const { data: digital, } = block;
-          digital[0] = data.subarray(0, left);
-          digital[1] = data.subarray(right + 1 - offset, blockSize - offset);
-        }
+        break;
       }
     }
   }
@@ -920,19 +932,11 @@ class StorageCache {
       blocks: chunks,
     } = digital;
     const [start, end] = range;
-    const begin = start % blockSize;
+    const begin = Math.floor(start / blockSize);
     const count = begin;
-    if (end < ((begin + 1) * blockSize)) {
+    if (end <= ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       this.removeBeginBlock(chunks, begin, begin, end);
-      continue;
-    } else {
-      const chunk = chunks[begin];
-      if (start === 0) {
-        this.removeBeginBlock(chunk, start, (begin + 1) * blockSize);
-      } else {
-        this.removeBeginBlock(chunk, start, (begin + 1) * blockSize);
-      }
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -1012,14 +1016,11 @@ class StorageCache {
       blocks: chunks,
     } = digital;
     const [start, end] = range;
-    const begin = start % blockSize;
+    const begin = Math.floor(start / blockSize);
     const ans = [];
-    if (end < ((begin + 1) * blockSize)) {
+    if (end <= ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       ans.push(this.getBeginBlock(chunk, begin, end));
-      continue;
-    } else {
-      ans.push(this.getBeginBlock(chunk, (begin + 1) * blockSize));
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
