@@ -107,7 +107,26 @@ class StorageCache {
     data.ruinAll();
   }
 
-  anewSeparation() {
+  newSeparation() {
+  }
+
+  getBlockPosition(location) {
+    const {
+      options: {
+        blockSize,
+      },
+    } = this;
+    return location % blockSize;
+  }
+
+  getOffset(data) {
+    const {
+      options: {
+        blockSize,
+      },
+    } = this;
+    const { length, } = data;
+    return blockSize - length;
   }
 
   dealOptions() {
@@ -382,7 +401,7 @@ class StorageCache {
         block.data = data.subarray(begin, end + 1);
       }
     } else {
-      const offset = data.length + 1;
+      const offset = this.getOffset(data);
       if (typeof data === 'string') {
         block.data = data.substring(begin - offset, end + 1 - offset);
       }
@@ -396,19 +415,26 @@ class StorageCache {
     const [begin, end] = range;
     if (begin === 0) {
       switch (kind) {
-        case 0:
-          block.data = [block.data, this.getData(data, begin, end)];
+        case 0: {
+          const beginPos = this.getBlockPostion(begin);
+          const endPos = this.getBlockPosition(end);
+          block.data = [block.data, this.getData(data, beginPos, endPos)];
           break;
-        case 1:
+        }
+        case 1: {
+          const beginPos = this.getBlockPosition(begin);
+          const endPos = this.getBlockPostion(end);
           block.data = [this.getData(data, begin, end), block.data];
           break;
+        }
       }
     } else {
-      const offset = data.length + 1;
+      const offset = this.getOffset(data);
       switch (kind) {
-        case 0:
+        case 0: {
           block.data = [block.data, this.getData(data, begin - offset, end + 1 - offset)];
           break;
+        }
         case 1:
           block.data = [this.getData(data, begin - offset, end + 1 - offset), block.data];
           break;
@@ -433,7 +459,7 @@ class StorageCache {
         block.data = charArray1.join('');
       }
     } else {
-      const offset = data.length - 1;
+      const offset = this.getOffset(data);
       if (Buffer.isBuffer(data)) {
         for (let i = left - offset; i <= right - offset; i += 1) {
           block.data[i] = data[i];
@@ -588,7 +614,7 @@ class StorageCache {
         block.data = charArray1[i].join('');
       }
     } else {
-      const offset = data.length + 1;
+      const offset = this.getOffset(data);
       if (Buffer.isBuffer(data)) {
         const figure = digital[type];
         for (let i = begin - offset; i <= end - offset; i += 1) {
@@ -783,11 +809,14 @@ class StorageCache {
       throw new Error('[Error] The end parameter of the ' + idx + ' range should be an integer type.');
     }
     if (start > end) {
-      throw :ew Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
+      throw new Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
     }
   }
 
-  removeFullBlock(blocks, index, begin, end) {
+  removeEndBlock(block, begin, end) {
+  }
+
+  removeBeginBlock(blocks, index, begin, end) {
     const {
       options: {
         blockSize,
@@ -824,7 +853,7 @@ class StorageCache {
         }
       }
     } else {
-      const offset = data.length + 1;
+      const offset = this.getOffset(data);
       const range = [begin, end];
       const { data, range: scope, } = block;
       if (typeof block === 'string') {
@@ -854,10 +883,16 @@ class StorageCache {
     }
   }
 
-  removeEndBlock(block, begin, end) {
-  }
-
-  removeBeginBlock(block, begin, end) {
+  removeFullBlock(blocks, index, begin, end) {
+    const {
+      options: {
+        blockSize,
+      },
+    } = this;
+    const block = blocks[index];
+    if (block !== undefined) {
+      blocks[index] = undefined;
+    }
   }
 
   removeBlocks(place, range, dealPlace) {
@@ -887,13 +922,17 @@ class StorageCache {
     const [start, end] = range;
     const begin = start % blockSize;
     const count = begin;
-    if (end <= ((begin + 1) * blockSize)) {
+    if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       this.removeBeginBlock(chunks, begin, begin, end);
       continue;
     } else {
       const chunk = chunks[begin];
-      this.removeBeginBlock(chunk, begin, (begin + 1) * blockSize);
+      if (start === 0) {
+        this.removeBeginBlock(chunk, start, (begin + 1) * blockSize);
+      } else {
+        this.removeBeginBlock(chunk, start, (begin + 1) * blockSize);
+      }
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -924,11 +963,8 @@ class StorageCache {
     });
   }
 
-  getBlock(block, begin, end) {
+  getMiddleBlock(block, begin, end) {
     const { data, type, } = block;
-    if (type === 0) {
-      data = data[1];
-    }
     if (begin === 0) {
       if (typeof data === 'string') {
         return data.substring(begin, end + 1);
@@ -937,7 +973,7 @@ class StorageCache {
         return data.subarray(begin, end + 1);
       }
     } else {
-      const offset = data.length + 1;
+      const offset = this.getOffset(data);
       if (typeof data === 'string') {
         return data.substring(begin - offset, end + 1 - offset);
       }
@@ -980,10 +1016,10 @@ class StorageCache {
     const ans = [];
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
-      ans.push(this.getBlock(chunk, begin, end));
+      ans.push(this.getBeginBlock(chunk, begin, end));
       continue;
     } else {
-      ans.push(this.getBlock(chunk, (begin + 1) * blockSize));
+      ans.push(this.getBeginBlock(chunk, (begin + 1) * blockSize));
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -992,10 +1028,10 @@ class StorageCache {
       count += 1;
       const chunk = chunks[count];
       if (ptr >= end) {
-        ans.push(this.getBlock(chunk, ptr - blockSize, end));
+        ans.push(this.getEndBlock(chunk, ptr - blockSize, end));
         break;
       } else {
-        ans.push(this.getBlock(chunk, ptr - blockSize, ptr));
+        ans.push(this.getMiddleBlock(chunk, ptr - blockSize, ptr));
       }
     }
     return ans;
