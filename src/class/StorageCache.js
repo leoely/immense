@@ -96,6 +96,18 @@ class StorageCache {
     this.getEventEmitter = false;
     this.eventEmitter = new EventEmitter();
     this.data = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
+    this.fillNumber = 0;
+    this.averageLength = 0;
+  }
+
+  emptyCache() {
+    const {
+      data,
+    } = this;
+    data.ruinAll();
+  }
+
+  anewSeparation() {
   }
 
   dealOptions() {
@@ -535,24 +547,26 @@ class StorageCache {
       if (length1 <= length2) {
         const fillSection = [right + 1, right + 1 + length];
         block.range = [end + 1, right];
-        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
         let figure;
         eventEmitter.on('giveData', (data) => figure = data);
+        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
         if (figure === undefined) {
           throw new Error('[Error] The process of processing the fill data was omitted.')
         }
         this.placeBlock(block, figure, 0, , end1 + 1);
+        this.fillNumber += 1;
       } else {
         const fillSection = [left + 1 - length, left + 1];
         block.range = [end + 1, right];
         block.range = [left, begin + 1];
-        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
         let figure;
         eventEmitter.on('giveData', (data) => figure = data);
+        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
         if (figure === undefined) {
           throw new Error('[Error] The process of processing the fill data was omitted.')
         }
         this.placeBlock(block, figure, 1, fillSection[0], fillSection[1]);
+        this.fillNumber += 1;
       }
     }
   }
@@ -757,26 +771,6 @@ class StorageCache {
     });
   }
 
-  getBlock(block, begin, end) {
-    const { data, } = block;
-    if (begin === 0) {
-      if (typeof data === 'string') {
-        return data.substring(begin, end + 1);
-      }
-      if (Buffer.isBuffer(data)) {
-        return data.subarray(begin, end + 1);
-      }
-    } else {
-      const offset = data.length + 1;
-      if (typeof data === 'string') {
-        return data.substring(begin - offset, end + 1 - offset);
-      }
-      if (Buffer.isBuffer(data)) {
-        return data.subarray(begin - offset, end + 1 - offset);
-      }
-    }
-  }
-
   checkRangeContent(range) {
     if (!Array.isArray(range)) {
       throw new Error('[Error] The parameter indexs should be an array type.');
@@ -793,45 +787,77 @@ class StorageCache {
     }
   }
 
-  removeBlock(block, begin, end) {
+  removeFullBlock(blocks, index, begin, end) {
+    const {
+      options: {
+        blockSize,
+      },
+    } = this;
+    const block = blocks[index];
     if (begin === 0) {
       const range = [begin, end];
       const { data, range: scope, } = block;
       if (typeof block === 'string') {
         const [left, right] = getComplement(scope, range);
-        block.data = data.substring(left, right + 1);
+        if ((left === 0) || (right === blockSize - 1)) {
+          blocks[index] = undefined;
+        } else {
+          block.type = 0;
+          block.range = [left, right];
+          block.data = [];
+          const { data: digital, } = block;
+          digital[0] = data.substring(0, left);
+          digital[1] = data.substing(right + 1, blockSize);
+        }
       }
       if (Buffer.isBuffer(block)) {
         const [left, right] = getComplement(scope, range);
-        block.data = data.substring(left, right + 1);
+        if ((left === 0) || (right === blockSize - 1)) {
+          blocks[index] = undefined;
+        } else {
+          block.type = 0;
+          block.range = [left, right];
+          block.data = [];
+          const { data: digital, } = block;
+          digital[0] = data.subarray(0, left);
+          digital[1] = data.subarray(right + 1, blockSize);
+        }
       }
     } else {
       const offset = data.length + 1;
       const range = [begin, end];
       const { data, range: scope, } = block;
       if (typeof block === 'string') {
-        const [left, right] = getComplement(scope, range);
-        block.data = data.substring(left - offset, right + 1 - offset);
+        if ((left === 0) || (right === blockSize - 1)) {
+          blocks[index] = undefined;
+        } else {
+          block.type = 0;
+          block.range = [left, right];
+          block.data = [];
+          const { data: digital, } = block;
+          digital[0] = data.substring(0, left);
+          digital[1] = data.substring(right + 1 - offset, blockSize - offset);
+        }
       }
       if (Buffer.isBuffer(block)) {
-        const [left, right] = getComplement(scope, range);
-        block.data = data.substring(left - offset, right + 1 - offset);
+        if ((left === 0) || (right === blockSize - 1)) {
+          blocks[index] = undefined;
+        } else {
+          block.type = 0;
+          block.range = [left, right];
+          block.data = [];
+          const { data: digital, } = block;
+          digital[0] = data.subarray(0, left);
+          digital[1] = data.subarray(right + 1 - offset, blockSize - offset);
+        }
       }
     }
   }
 
-  removeGroupBlocks(place, ranges) {
-    if (typeof place !== 'string') {
-      throw new Error('[Error] The parameter place should be a string type.');
-    }
-    place = this.getLinkPlace(place);
-    if (!Array.isArray(ranges)) {
-      throw new Error('[Error] The parameter ranges should be an array type.');
-    }
-    const ans = [];
-    ranges.forEach((range) => {
-      this.removeBlocks(place, range, false);
-    });
+  removeEndBlock(block, begin, end) {
+  }
+
+  removeBeginBlock(block, begin, end) {
   }
 
   removeBlocks(place, range, dealPlace) {
@@ -863,8 +889,11 @@ class StorageCache {
     const count = begin;
     if (end <= ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
-      this.removeBlock(chunk, begin, end);
+      this.removeBeginBlock(chunks, begin, begin, end);
       continue;
+    } else {
+      const chunk = chunks[begin];
+      this.removeBeginBlock(chunk, begin, (begin + 1) * blockSize);
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -872,16 +901,34 @@ class StorageCache {
       ptr += blockSize;
       if (ptr >= end) {
         const chunk = chunks[count];
-        this.removeBlock(chunk, ptr - blockSize, end);
+        this.removeEndBlock(chunks, count, ptr - blockSize, end);
         break;
       } else {
         const chunk = chunks[count];
-        this.removeBlock(chunk, ptr - blockSize, ptr);
+        this.removeFullBlock(chunks, count, ptr - blockSize, ptr);
       }
     }
   }
 
-  getData(data, begin, end) {
+  removeGroupBlocks(place, ranges) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    place = this.getLinkPlace(place);
+    if (!Array.isArray(ranges)) {
+      throw new Error('[Error] The parameter ranges should be an array type.');
+    }
+    const ans = [];
+    ranges.forEach((range) => {
+      this.removeBlocks(place, range, false);
+    });
+  }
+
+  getBlock(block, begin, end) {
+    const { data, type, } = block;
+    if (type === 0) {
+      data = data[1];
+    }
     if (begin === 0) {
       if (typeof data === 'string') {
         return data.substring(begin, end + 1);
@@ -931,22 +978,24 @@ class StorageCache {
     const [start, end] = range;
     const begin = start % blockSize;
     const ans = [];
-    if (end <= ((begin + 1) * blockSize)) {
-      const { data, } = chunks[begin];
-      ans.push(this.getBlock(data, begin, end));
+    if (end < ((begin + 1) * blockSize)) {
+      const chunk = chunks[begin];
+      ans.push(this.getBlock(chunk, begin, end));
       continue;
+    } else {
+      ans.push(this.getBlock(chunk, (begin + 1) * blockSize));
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
     while (true) {
       ptr += blockSize;
       count += 1;
-      const { data: block, } = chunks[count];
+      const chunk = chunks[count];
       if (ptr >= end) {
-        ans.push(this.getData(data, ptr - blockSize, end));
+        ans.push(this.getBlock(chunk, ptr - blockSize, end));
         break;
       } else {
-        ans.push(this.getData(data, ptr - blockSize, ptr));
+        ans.push(this.getBlock(chunk, ptr - blockSize, ptr));
       }
     }
     return ans;
