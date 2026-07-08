@@ -572,8 +572,8 @@ class StorageCache {
     if (interSection1 !== undefined && interSection2 !== undefined) {
       block.type = 1;
       block.range = [0, blockSize - 1];
-      const difference1Section = getDifferenceSection(section1, range);
-      const difference2Section = getDifferenceSection(section2, range);
+      const difference1Section = getDifferenceSection(range, section1);
+      const difference2Section = getDifferenceSection(range, section2);
       block.data = Buffer.alloc(blockSize);
       const [begin1, end1] = difference1Section;
       const [begin2, end2] = difference2Section;
@@ -851,6 +851,66 @@ class StorageCache {
   }
 
   removeEndBlock(block, begin, end) {
+    const { range: scope, } = block;
+    const [left, right] = range;
+    const {
+      options: {
+        blockSize,
+      },
+    } = this;
+    if (left === 0 && right === blockSize - 1) {
+      const region = getComplement(scope, range);
+      block.range = region;
+      const [left, right] = region;
+      this.setBlock(block, data, left, right);
+    } else if (right === blockSize - 1) {
+      blocks[index] = undefined;
+    } else {
+      const region = getComplement(scope, range);
+      const length = getSectionLength(region);
+      if (length === 0) {
+        blocks[index] = undefined;
+      } else {
+        block.range = region;
+        const [left, right] = region;
+        const offset = this.getOffset(data);
+        if (typeof block === 'string') {
+          block.data = data.substring(left - offset, right + 1 - offset);
+        }
+        if (Buffer.isBuffer(block)) {
+          block.data = data.subarray(left - offset, right + 1 - offset);
+        }
+      }
+    }
+  }
+
+  removeSingleBeginBlock(block, range) {
+    const { range: scope, } = block;
+    const [left, right] = range;
+    if (left === 0 && right === blockSize - 1) {
+      const region = getComplement(scope, range);
+      const [left, right] = region;
+      this.setBlock(block, data, left, right);
+      block.range = region;
+    } else if (left === 0) {
+      blocks[index] = undefined;
+    } else {
+      const region = getComplement(scope, range);
+      const length = getSectionLength(region);
+      if (length === 0) {
+        blocks[index] = undefined;
+      } else {
+        block.range = region;
+        const [left, right] = region;
+        const offset = this.getOffset(data);
+        if (typeof block === 'string') {
+          block.data = data.substring(left - offset, right + 1 - offset);
+        }
+        if (Buffer.isBuffer(block)) {
+          block.data = data.subarray(left - offset, right + 1 - offset);
+        }
+      }
+    }
   }
 
   removeBeginBlock(blocks, index, begin, end) {
@@ -864,32 +924,13 @@ class StorageCache {
     const { type, range: scope, data, } = block;
     switch (type) {
       case 0: {
+        const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
+        this.remove(block, section1);
+        this.remove(block, section2);
         break;
       }
       case 1: {
-        const [left, right] = range;
-        if (left === 0 && right === blockSize - 1) {
-          const region = getComplement(scope, range);
-          block.range = region;
-        } else if (left === 0) {
-          blocks[index] = undefined;
-        } else {
-          const region = getComplement(scope, range);
-          const length = getSectionLength(region);
-          if (length === 0) {
-            blocks[index] = undefined;
-          } else {
-            block.range = region;
-            const [left, right] = region;
-            const offset = this.getOffset(data);
-            if (typeof block === 'string') {
-              block.data = data.substring(left - offset, right + 1 - offset);
-            }
-            if (Buffer.isBuffer(block)) {
-              block.data = data.subarray(left - offset, right + 1 - offset);
-            }
-          }
-        }
+        this.removeSingleBeginBlock(block, range);
         break;
       }
     }
