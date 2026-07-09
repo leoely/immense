@@ -101,6 +101,7 @@ class StorageCache {
     this.getEventEmitter = false;
     this.eventEmitter = new EventEmitter();
     this.data = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
+    this.place = '';
     this.fillNumber = 0;
     this.averageLength = 0;
   }
@@ -126,10 +127,6 @@ class StorageCache {
     const rightIndex = right % blockSize;
     if (leftIndex === 0) {
       return [leftIndex, rightIndex];
-    } else if (rightIndex === blockSize - 1) {
-      const length = getSectionLength(section);
-      const offset = blockSize - length;
-      return [leftIndex - offset, rightIndex - offset];
     } else {
       const offset = leftIndex;
       return [leftIndex - offset, rightIndex - offset];
@@ -427,13 +424,9 @@ class StorageCache {
         options: {
           blockSize,
         },
-      }
-      let figure;
-      eventEmitter.on('giveData', (data) => figure = data);
-      eventEmitter.emit('requestData', left, right);
-      if (figure === undefined) {
-        throw new Error('[Error] The process of processing the fill data was omitted.')
-      }
+        place,
+      } = this;
+      const figure = this.requestStorageData(place, left, right);
       this.adjunctionBlock(block, data, left, right);
       this.fillNumber += 1;
     }
@@ -588,24 +581,16 @@ class StorageCache {
       if (length1 <= length2) {
         const fillSection = [right + 1, right + 1 + length];
         block.range = [end + 1, right];
-        let figure;
-        eventEmitter.on('giveData', (data) => figure = data);
-        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
-        if (figure === undefined) {
-          throw new Error('[Error] The process of processing the fill data was omitted.')
-        }
+        const { place, } = this;
+        const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
         this.placeBlock(block, figure, 0, , end1 + 1);
         this.fillNumber += 1;
       } else {
         const fillSection = [left + 1 - length, left + 1];
         block.range = [end + 1, right];
         block.range = [left, begin + 1];
-        let figure;
-        eventEmitter.on('giveData', (data) => figure = data);
-        eventEmitter.emit('requestData', fillSection[0], fillSection[1]);
-        if (figure === undefined) {
-          throw new Error('[Error] The process of processing the fill data was omitted.')
-        }
+        const { place, } = this;
+        const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
         this.placeBlock(block, figure, 1, fillSection[0], fillSection[1]);
         this.fillNumber += 1;
       }
@@ -666,6 +651,7 @@ class StorageCache {
     const [start, end] = range;
     const begin = Math.floor(start / blockSize);
     const count = begin;
+    this.place = place;
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       const { type, } = chunk;
@@ -718,6 +704,7 @@ class StorageCache {
         }
       }
     }
+    this.place = place;
   }
 
   addGroupBlocks(place, ranges, figures) {
@@ -839,6 +826,7 @@ class StorageCache {
       this.setBlock(block, data, left, right);
     } else if (right === blockSize - 1) {
       block.range = [left, right];
+      this.setBlock(block, data, left, right);
     } else {
       const region = getComplement(scope, range);
       const length = getSectionLength(region);
@@ -847,12 +835,13 @@ class StorageCache {
       } else {
         block.range = region;
         const [left, right] = region;
-        const offset = this.getOffset(data);
+        const interval = this.getBlockInterval(region);
+        const [head, tail] = interval;
         if (typeof block === 'string') {
-          block.data = data.substring(left - offset, right + 1 - offset);
+          block.data = data.substring(head, tail + 1);
         }
         if (Buffer.isBuffer(block)) {
-          block.data = data.subarray(left - offset, right + 1 - offset);
+          block.data = data.subarray(head, tail + 1);
         }
       }
     }
@@ -868,6 +857,7 @@ class StorageCache {
       block.range = region;
     } else if (left === 0) {
       block.range = [left, right];
+      this.setBlock(block, data, left, right);
     } else {
       const region = getComplement(scope, range);
       const length = getSectionLength(region);
@@ -876,12 +866,12 @@ class StorageCache {
       } else {
         block.range = region;
         const [left, right] = region;
-        const offset = this.getOffset(data);
+        const [head, tail] = this.getBlockInterval(region);
         if (typeof block === 'string') {
-          block.data = data.substring(left - offset, right + 1 - offset);
+          block.data = data.substring(head, tail + 1);
         }
         if (Buffer.isBuffer(block)) {
-          block.data = data.subarray(left - offset, right + 1 - offset);
+          block.data = data.subarray(head, tail + 1);
         }
       }
     }
@@ -972,6 +962,7 @@ class StorageCache {
     const [start, end] = range;
     const begin = Math.floor(start / blockSize);
     const count = begin;
+    this.place = place;
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       this.removeBeginBlock(chunks, begin, begin, end);
@@ -997,6 +988,7 @@ class StorageCache {
         this.removeFullBlock(chunks, count, ptr - blockSize, ptr);
       }
     }
+    this.place = place;
   }
 
   removeGroupBlocks(place, ranges) {
@@ -1013,9 +1005,25 @@ class StorageCache {
     });
   }
 
-  getFullBlock(block, begin, end) {
-    const { data, type, } = block;
-    const ragne = [begin, end];
+  requestStorageData(place, left, right) {
+    let figure;
+    eventEmitter.on('giveData', (data) => figure = data);
+    eventEmitter.emit('requestData', place, left, right);
+    if (figure === undefined) {
+      throw new Error('[Error] The process of processing the fill data was omitted.')
+    }
+    return figure;
+  }
+
+  getSingleBlock(block, begin, end) {
+    const { data, type, range: scope, } = block;
+    const range = [begin, end];
+    const { place, } = this;
+    const differentSections = getDifferenceSection(range, scope);
+    differentSections.forEach(([left, right]) => {
+      const figure = this.requestStorageData(place, left, rigth);
+      this.adjunctionBlock(block, figure, left, right);
+    });
     const interval = this.getBlockInterval(range);
     const [head, tail] = interval;
     if (typeof data === 'string') {
@@ -1023,6 +1031,29 @@ class StorageCache {
     }
     if (Buffer.isBuffer(data)) {
       return data.subarray(head, tail + 1);
+    }
+  }
+
+  getBlock(blocks, index, begin, end) {
+    const {
+      options: {
+        blockSize,
+      },
+    } = this;
+    const range = [begin, end];
+    const block = blocks[index];
+    const { type, range: scope, data, } = block;
+    switch (type) {
+      case 0: {
+        const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
+        this.getSingleBlock(block, section1);
+        this.getSingleBlock(block, section2);
+        break;
+      }
+      case 1: {
+        this.getSingleBlock(block, range);
+        break;
+      }
     }
   }
 
@@ -1057,12 +1088,13 @@ class StorageCache {
     const [start, end] = range;
     const begin = Math.floor(start / blockSize);
     const ans = [];
+    this.place = place;
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
-      ans.push(this.getBeginBlock(chunk, begin, end));
+      ans.push(this.getBlock(chunk, begin, end));
       continue;
     } else {
-      ans.push(this.getBeginBlock(chunk, (begin + 1) * blockSize));
+      ans.push(this.getBlock(chunk, (begin + 1) * blockSize));
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -1071,12 +1103,13 @@ class StorageCache {
       count += 1;
       const chunk = chunks[count];
       if (ptr >= end) {
-        ans.push(this.getEndBlock(chunk, ptr - blockSize, end));
+        ans.push(this.getBlock(chunk, ptr - blockSize, end));
         break;
       } else {
-        ans.push(this.getFullBlock(chunk, ptr - blockSize, ptr));
+        ans.push(this.getBlock(chunk, ptr - blockSize, ptr));
       }
     }
+    this.place = '';
     return ans;
   }
 
