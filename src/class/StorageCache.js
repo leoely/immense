@@ -86,6 +86,10 @@ function getSectionLength(section) {
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
+      threshold: 0.01,
+      bond: 25,
+      dutyCycle: 500,
+      logLevel: 0,
       blockSize: 2048,
       cacheStats: false,
       cacheOwn: false,
@@ -100,9 +104,16 @@ class StorageCache {
     this.dealOptions();
     this.getEventEmitter = false;
     this.eventEmitter = new EventEmitter();
-    this.data = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
+    const {
+      options: {
+        logLevel,
+      },
+    } = this;
+    this.data = new FileRouter({ logLevel, debug: false, hideError: true, });
+    this.startTime = Date.now();
     this.place = '';
     this.fillNumber = 0;
+    this.totalNumber = 0;
     this.averageLength = 0;
   }
 
@@ -113,7 +124,41 @@ class StorageCache {
     data.ruinAll();
   }
 
+  updateAverageLength(newAverageLength) {
+    const {
+      averageLength,
+    } = this;
+    this.averageLength = (averageLength + newAverageLength) / 2;
+  }
+
   newSeparation() {
+  }
+
+  increaseFillNumber() {
+    this.fillNumber += 1;
+    this.updateDutyCycle();
+    this.updateRate();
+  }
+
+  updateRate() {
+    const {
+      fillNumber,
+      totalNumber,
+    } = this;
+    this.rate = fillNumber / totalNumber;
+  }
+
+  postOperation() {
+    this.place = '';
+    this.totalNumber += 1;
+  }
+
+  updateDutyCycle() {
+    const {
+      fillNumber,
+    } = this;
+    const endTime = Date.now();
+    this.dutyCycle = fillNumber * 1000 * 60 * 60 / (startTime - endTime);
   }
 
   getBlockInterval(section) {
@@ -136,6 +181,7 @@ class StorageCache {
   dealOptions() {
     const {
       options: {
+        logLevel,
         blockSize,
         cacheStats,
         cacheOwn,
@@ -144,6 +190,9 @@ class StorageCache {
         cacheDiskOccupy,
       },
     } = this;
+    if (!Number.isInteger(logLevel)) {
+      throw new Error('[Error] The option logLevel should be an integer type.');
+    }
     if (!Number.isInteger(blockSize)) {
       throw new Error('[Error] The option blockSize should be an integer type.');
     }
@@ -428,6 +477,7 @@ class StorageCache {
       } = this;
       const figure = this.requestStorageData(place, left, right);
       this.adjunctionBlock(block, data, left, right);
+      this.updateAverageLength(getSectionLength(range));
       this.fillNumber += 1;
     }
     const interval = this.getBlockInterval(range);
@@ -584,6 +634,7 @@ class StorageCache {
         const { place, } = this;
         const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
         this.placeBlock(block, figure, 0, , end1 + 1);
+        this.updateAverageLength(length1);
         this.fillNumber += 1;
       } else {
         const fillSection = [left + 1 - length, left + 1];
@@ -592,6 +643,7 @@ class StorageCache {
         const { place, } = this;
         const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
         this.placeBlock(block, figure, 1, fillSection[0], fillSection[1]);
+        this.updateAverageLength(length2);
         this.fillNumber += 1;
       }
     }
@@ -704,7 +756,7 @@ class StorageCache {
         }
       }
     }
-    this.place = place;
+    this.postOperation();
   }
 
   addGroupBlocks(place, ranges, figures) {
@@ -988,7 +1040,7 @@ class StorageCache {
         this.removeFullBlock(chunks, count, ptr - blockSize, ptr);
       }
     }
-    this.place = place;
+    this.postOperation();
   }
 
   removeGroupBlocks(place, ranges) {
@@ -1109,7 +1161,7 @@ class StorageCache {
         ans.push(this.getBlock(chunk, ptr - blockSize, ptr));
       }
     }
-    this.place = '';
+    this.postOperation();
     return ans;
   }
 
