@@ -226,7 +226,6 @@ class StorageCache {
       throw new Error('[Error] The parameter options should be an object type.');
     }
     const {
-      options,
       data,
     } = this;
     this.checkNotNull(place);
@@ -445,7 +444,7 @@ class StorageCache {
   }
 
   adjunctionBlock(block, data, begin, end) {
-    const { data, type, range: scope, } = block;
+    const { type, range: scope, } = block;
     if (begin === 0) {
       if (typeof data === 'string') {
         block.data = data + block.data;
@@ -465,7 +464,7 @@ class StorageCache {
 
   setBlock(block, data, begin, end) {
     const range = [begin, end];
-    const { data, type, range: scope, } = block;
+    const { type, range: scope, } = block;
     const region = getComplement(range, scope);
     if (getSectionLength(region) > 0) {
       const [left, right] = region;
@@ -478,7 +477,7 @@ class StorageCache {
       const figure = this.requestStorageData(place, left, right);
       this.adjunctionBlock(block, data, left, right);
       this.updateAverageLength(getSectionLength(range));
-      this.fillNumber += 1;
+      this.increaseFillNumber();
     }
     const interval = this.getBlockInterval(range);
     const [head, tail] = interval;
@@ -558,10 +557,9 @@ class StorageCache {
   }
 
   addPositiveBlock(block, data, begin, end) {
-    const [begin, end] = range;
-    const { data, range: scope, } = block;
+    const { range: scope, } = block;
     if (!interSection(range, scope)) {
-      if (isBareSection(scope)) {
+      if (isNullSection(scope)) {
         block.range = [begin, end];
         this.setBlock(block, data, begin, end);
       } else {
@@ -633,9 +631,9 @@ class StorageCache {
         block.range = [end + 1, right];
         const { place, } = this;
         const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
-        this.placeBlock(block, figure, 0, , end1 + 1);
+        this.placeBlock(block, figure, 0, fillSection[0], fillSection[1]);
         this.updateAverageLength(length1);
-        this.fillNumber += 1;
+        this.increaseFillNumber();
       } else {
         const fillSection = [left + 1 - length, left + 1];
         block.range = [end + 1, right];
@@ -644,7 +642,7 @@ class StorageCache {
         const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
         this.placeBlock(block, figure, 1, fillSection[0], fillSection[1]);
         this.updateAverageLength(length2);
-        this.fillNumber += 1;
+        this.increaseFillNumber();
       }
     }
   }
@@ -701,8 +699,7 @@ class StorageCache {
     } = digital;
     this.checkBlocksContent(blocks);
     const [start, end] = range;
-    const begin = Math.floor(start / blockSize);
-    const count = begin;
+    const begin = Math.floor(start / blockSize) * blockSize;
     this.place = place;
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
@@ -715,7 +712,7 @@ class StorageCache {
           this.addPositveBlock(chunk, digital, data, begin, blockSize - 1);
           break;
       }
-      continue;
+      return;
     } else {
       const chunk = chunks[begin];
       const { type, } = chunk;
@@ -1008,17 +1005,15 @@ class StorageCache {
       options: {
         blockSize,
       },
-      range,
       blocks: chunks,
     } = digital;
     const [start, end] = range;
-    const begin = Math.floor(start / blockSize);
-    const count = begin;
+    const begin = Math.floor(start / blockSize) * blockSize;
     this.place = place;
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       this.removeBeginBlock(chunks, begin, begin, end);
-      continue;
+      return;
     } else {
       const chunk = chunks[begin];
       if (start === 0) {
@@ -1134,17 +1129,16 @@ class StorageCache {
       options: {
         blockSize,
       },
-      range,
       blocks: chunks,
     } = digital;
     const [start, end] = range;
-    const begin = Math.floor(start / blockSize);
+    const begin = Math.floor(start / blockSize) * blockSize;
     const ans = [];
     this.place = place;
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       ans.push(this.getBlock(chunk, begin, end));
-      continue;
+      return;
     } else {
       ans.push(this.getBlock(chunk, (begin + 1) * blockSize));
     }
