@@ -1,4 +1,5 @@
 import EventEmitter from 'events';
+import os from 'os';
 import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
 
@@ -93,8 +94,21 @@ function bitToByte(bit) {
   }
 }
 
-function getArrayOccupy(length) {
-  return (length * 2 + 1) * 64;
+function getBitWidth() {
+  const arch = os.arch();
+  switch (arch) {
+    case 'ia32':
+    case 'arm':
+    case 's390x':
+      return 32;
+    case 'x64':
+    case 'riscv64':
+    case 'ppc64':
+    case 'mips':
+    case 'loong64':
+    case 'arm64':
+      return 64;
+  }
 }
 
 class StorageCache {
@@ -111,6 +125,7 @@ class StorageCache {
       cacheRealpath: false,
       cacheDiskOccupy: false,
     };
+    defaultOptions.bitWidth = getBitWidth();
     if (typeof options !== 'object' && options !== null) {
       throw new Error('[Error] The parameter options should be of type object.');
     }
@@ -129,7 +144,25 @@ class StorageCache {
     this.fillNumber = 0;
     this.totalNumber = 0;
     this.averageLength = 0;
-    this.minimumLength = bitToByte((getArrayOccupy(5) + 6) * 64);
+    this.minimumLength = bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
+  }
+
+  getPointerOccupy() {
+    const {
+      options: {
+        bitWidth,
+      },
+    } = this;
+    return bitWidth;
+  }
+
+  getArrayOccupy(length) {
+    const {
+      options: {
+        bitWidth,
+      }
+    } = this;
+    return (length * 2 + 1) * bitWidth;
   }
 
   emptyCache() {
@@ -203,6 +236,7 @@ class StorageCache {
         cacheMod,
         cacheRealpath,
         cacheDiskOccupy,
+        bitWidth,
       },
     } = this;
     if (!Number.isInteger(logLevel)) {
@@ -225,6 +259,9 @@ class StorageCache {
     }
     if (typeof cacheDiskOccupy !== 'boolean') {
       throw new Error('[Error] The option cacheDiskOccupy should be a boolean type.');
+    }
+    if (!Number.isInteger(bitWidth)) {
+      throw new Error('[Error] The option bitWidth should be a integer type.');
     }
   }
 
