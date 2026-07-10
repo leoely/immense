@@ -83,6 +83,20 @@ function getSectionLength(section) {
   return right - left + 1;
 }
 
+function bitToByte(bit) {
+  if (!Number.isInteger(bit)) {
+    throw new Error('[Error] The parameter bit should be of integer type.');
+  }
+  const byte = bit / 8;
+  if (!Number.isInteger(byte)) {
+    throw new Error('[Error] The calculated number of bytes should be an integer.')
+  }
+}
+
+function getArrayOccupy(length) {
+  return (length * 2 + 1) * 64;
+}
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -115,6 +129,7 @@ class StorageCache {
     this.fillNumber = 0;
     this.totalNumber = 0;
     this.averageLength = 0;
+    this.minimumLength = bitToByte((getArrayOccupy(5) + 6) * 64);
   }
 
   emptyCache() {
