@@ -147,6 +147,52 @@ class StorageCache {
     this.minimumLength = bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
   }
 
+  transformBlocks(place, data, start) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (!Number.isInteger(start)) {
+      throw new Error('[Error] The parameter start should be of integer type.');
+    }
+    this.checkNotNull(place);
+    const {
+      data: figure,
+    } = this;
+    const digital = figure.gain(place);
+    const {
+      options: {
+        blockSize,
+      },
+    } = digital;
+    const blocks = [];
+    if (typeof data === 'string') {
+      const string = data;
+      for (let i = 0; i < data.length; i += blockSize) {
+        const begin = i + start;
+        const end = i + blockSize - 1 + start;
+        blocks.push({
+          type: 1,
+          range: [begin, end],
+          data: string.substring(begin, end),
+        });
+      }
+    } else if (Buffer.isBuffer(data)) {
+      const buffer = data;
+      for (let i = 0; i < data.length; i += blockSize) {
+        const begin = i + start;
+        const end = i + blockSize - 1 + start;
+        blocks.push({
+          type: 1,
+          range: [begin, end],
+          data: string.subarray(begin, end),
+        });
+      }
+    } else {
+      throw new Error('[Error] The parameter data should be of string type or buffer type.');
+    }
+    return blocks;
+  }
+
   getPointerOccupy() {
     const {
       options: {
@@ -160,7 +206,7 @@ class StorageCache {
     const {
       options: {
         bitWidth,
-      }
+      },
     } = this;
     return (length * 2 + 1) * bitWidth;
   }
@@ -437,8 +483,14 @@ class StorageCache {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
+    const {
+      data,
+    } = this;
     const digital = data.gain(place);
     if (digital === undefined) {
+      const {
+        options,
+      } = this;
       const nullDigital = {
         options,
         blocks: [],
@@ -458,7 +510,7 @@ class StorageCache {
       if (cacheOwn === true) {
         nullDigital[own] = [-1, -1];
       }
-      if (cacheMode === true) {
+      if (cacheMod === true) {
         nullDigital[mod] = -1;
       }
       if (cacheRealpath === true) {
