@@ -147,6 +147,64 @@ class StorageCache {
     this.minimumLength = bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
   }
 
+  anewSeparation(place, newBlockSize) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    place = this.getLinkPlace(place);
+    const {
+      data,
+      options: {
+        logLevel,
+      },
+    } = this;
+    const digital = data.gain(place);
+    const {
+      blocks,
+      options,
+    } = digital;
+    let incompleteRange;
+    blocks.forEach((block) => {
+      if (block !== undefined) {
+        const { range, type, data, } = block;
+      }
+    });
+    this.newData = new FileRouter({ logLevel, debug: false, hideError: true, });
+    const nullDigital = {
+      options,
+      blocks: [],
+    };
+    nullDigital.options['blockSize'] = newBlockSize;
+    const {
+      options: {
+        cacheStats,
+        cacheOwn,
+        cacheMod,
+        cacheRealpath,
+        cacheDiskOccupy,
+      },
+    } = nullDigital;
+    if (cacheStats === true) {
+      nullDigital[stats] = {};
+    }
+    if (cacheOwn === true) {
+      nullDigital[own] = [-1, -1];
+    }
+    if (cacheMod === true) {
+      nullDigital[mod] = -1;
+    }
+    if (cacheRealpath === true) {
+      nullDigital[realpath] = '';
+    }
+    if (cacheDiskOccupy === true) {
+      nullDigital[diskOccupy] = -1;
+    }
+    const {
+      newData,
+    } = this;
+    newData.attach(place, nullDigital);
+  }
+
   transformBlocks(place, data, start) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
@@ -223,9 +281,6 @@ class StorageCache {
       averageLength,
     } = this;
     this.averageLength = (averageLength + newAverageLength) / 2;
-  }
-
-  newSeparation() {
   }
 
   increaseFillNumber() {
@@ -315,7 +370,53 @@ class StorageCache {
     return this.eventEmitter;
   }
 
-  changeOptions(place, options) {
+  greaterThresholdAndBondAndDutyCycle(place) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    place = this.getLinkPlace(place);
+    const {
+      data,
+    } = this;
+    const digital = data.gain(place);
+    const {
+      options: {
+        threshold,
+        bond,
+        dutyCycle,
+      },
+    } = digital;
+    if (threshold === undefined && bond === undefined && dutyCycle !== undefined) {
+      return this.dutyCycle >= dutyCycle;
+    }
+    if (threshold === undefined && dutyCycle === undefined && bond !== undefined) {
+      const { fillNumber, } = this;
+      return fillNumber >= bond;
+    }
+    if (bond === undefined && dutyCycle === undefined && threshold !== undefined) {
+      const { rate, } = this;
+      return rate >= threshold;
+    }
+    if (bond !== undefined && dutyCycle !== undefined && threshold !== undefined) {
+      const { fillNumber, } = this;
+      return fillNumber >= bond && this.dutyCycle >= dutyCycle;
+    }
+    if (threshold !== undefined && dutyCycle !== undefined && bond === undefined) {
+      const { rate, } = this;
+      return threshold >= threshold && this.dutyCycle >= dutyCycle;
+    }
+    if (threshold !== undefined && bond !== undefined && dutyCycle === undefined) {
+      const { rate, fillNumber, } = this;
+      return rate >= threshold && fillNumber >= bond;
+    }
+    if (threshold !== undefined && bond !== undefined && dutyCycle !== undefined) {
+      const { rate, fillNumber, } = this;
+      return rate >= threshold && fillNumber >= bond && this.dutyCycle >= dutyCycle;
+    }
+    throw new Error('[Error] Threshold, bond and dutyCycle cannot be empty at the same time.');
+  }
+
+  changeOptions(place, newOptions) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
@@ -328,7 +429,79 @@ class StorageCache {
     } = this;
     this.checkNotNull(place);
     const digital = data.gain(place);
-    digital.options = options;
+    const {
+      options: {
+        threshold,
+        bond,
+        dutyCycle,
+        logLevel,
+        blockSize,
+        cacheStats,
+        cacheOwn,
+        cacheMod,
+        cacheRealpath,
+        cacheDiskOccupy,
+      },
+    } = digital;
+    const {
+        threshold: newThreshold,
+        bond: newBond,
+        dutyCycle: newDutyCycle,
+        blockSize: newBlockSize,
+        cacheStats: newCacheStats,
+        cacheOwn: newCacheOwn,
+        cacheMod: newCacheMod,
+        cacheRealpath: newCacheRealpath,
+        cacheDiskOccupy: newCacheDiskOccupy,
+    } = newOptions;
+    if (threshold !== newThreshold) {
+      this.rate = 0;
+    }
+    if (bond !== newBond) {
+      this.fillNumber = 0;
+    }
+    if (dutyCycle !== newDutyeCycle) {
+      this.dutyCyle = 0;
+    }
+    if (blockSize !== newBlockSize) {
+      this.anewSeperation(place);
+    }
+    if (cacheStats !== newCacheStats) {
+      if (newCacheStats === true) {
+        digital.stats = {};
+      } else {
+        delete digital.stats;
+      }
+    }
+    if (cacheOwn !== newCacheOwn) {
+      if (newCacheOwn === true) {
+        digital.own = [-1, -1];
+      } else {
+        delete digital.own;
+      }
+    }
+    if (cacheMod !== newCacheMod) {
+      if (newCacheMod) {
+        digital.mod = -1;
+      } else {
+        delete digital.mod;
+      }
+    }
+    if (cacheRealPath !== newCacheRealpath) {
+      if (newCacheRealpath) {
+        digital.realpath = '';
+      } else {
+        delete digital.realpath;
+      }
+    }
+    if (cacheDiskOccupy !== newCacheDiskOccupy) {
+      if (newCacheDiskOccupy) {
+        digital.diskOccupy = -1;
+      } else {
+        delete digital.diskOccupy;
+      }
+    }
+    digital.options = newOptions;
   }
 
   updateOwn(place, uid, gid) {
