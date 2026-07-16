@@ -1,6 +1,7 @@
 import fsPromises from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
+import Fulmination from 'fulmination';
 import disk from 'diskusage';
 import {
   ByteArray,
@@ -381,6 +382,7 @@ class Storage {
       temporaryDiskAvailable: -1,
       temporaryDiskSwitch: false,
       develop: false,
+      debug: false,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
@@ -391,7 +393,26 @@ class Storage {
     this.indexPath = indexPath;
     this.shiftOneReasonBytes = new ByteArray({ size: 202n, shift: 1n, });
     this.shiftTwoBytes = new ByteArray({ size: 256n, shift: 2n, });
+    this.fulmination = new Fulmination();
     const bytes = new ByteArray({ size: 202n, shift: 0n, });
+    const {
+      options: {
+        debug,
+      },
+    } = this;
+    if (debug === true) {
+      const { fulmination, } = this;
+      fulmination.scan(`
+      [+] bold:
+      |
+      | **  ██╗███╗░░░███╗███╗░░░███╗███████╗███╗░░██╗░██████╗███████╗░░░░░░░░██╗░██████╗
+      | **  ██║████╗░████║████╗░████║██╔════╝████╗░██║██╔════╝██╔════╝░░░░░░░░██║██╔════╝
+      | **  ██║██╔████╔██║██╔████╔██║█████╗░░██╔██╗██║╚█████╗░█████╗░░░░░░░░░░██║╚█████╗░
+      | **  ██║██║╚██╔╝██║██║╚██╔╝██║██╔══╝░░██║╚████║░╚═══██╗██╔══╝░░░░░██╗░░██║░╚═══██╗
+      | **  ██║██║░╚═╝░██║██║░╚═╝░██║███████╗██║░╚███║██████╔╝███████╗██╗╚█████╔╝██████╔╝
+      | **  ╚═╝╚═╝░░░░░╚═╝╚═╝░░░░░╚═╝╚══════╝╚═╝░░╚══╝╚═════╝░╚══════╝╚═╝░╚════╝░╚═════╝░
+      `);
+    }
   }
 
   dealOptions() {
