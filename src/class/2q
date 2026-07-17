@@ -86,9 +86,8 @@ function getSectionLength(section) {
 
 function joinContinuousSections(sections) {
   const { length, } = sections;
-  const [left] = sections[0];
-  const [_, right] = sections[length - 1];
-  return [left, right];
+  const beginSection = sections[0];
+  const endSection = sections[length - 1];
 }
 
 function bitToByte(bit) {
@@ -154,22 +153,6 @@ class StorageCache {
     this.minimumLength = bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
   }
 
-  addSinglePart(place, section1, block) {
-    const { type, data, } = block;
-    switch (type) {
-      case 0:
-        this.addBlock(place, section1, data[0]);
-        break;
-      case 1:
-        this.addBlock(place, section1, data);
-        break;
-    }
-  }
-
-  addIncompletePart(place, block, incompleteBlockWrap) {
-    incompleteBlockWrap.val = block;
-  }
-
   anewSeparation(place, newBlockSize) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
@@ -186,9 +169,6 @@ class StorageCache {
       blocks,
       options,
     } = digital;
-    const {
-      blockSize,
-    } = options;
     this.newData = new FileRouter({ logLevel, debug: false, hideError: true, });
     const nullDigital = {
       options,
@@ -222,134 +202,24 @@ class StorageCache {
     const {
       newData,
     } = this;
-    const incompleteBlockWrap = { val: undefined, };
-    for (let i = 0; i < blocks.length; i += 1) {
+    let incompleteRange;
+    blocks.forEach((block) => {
       if (block !== undefined) {
         const { range, type, data, } = block;
         switch (type) {
           case 0: {
             const [section1, section2] = getDifferenceSection([0, newBlockSize - 1], range);
-            const { val: incompleteBlock, } = incompleteBlockWrap;
-            if (incompleteBlock !== undefined) {
-              const { data: kind, data: figure, } = incompleteBlock;
-              let joinSection;
-              switch (kind) {
-                case 0: {
-                  const { range: scope, } = incompleteBlock;
-                  const [_, interval2] = getDifferenceSection([0, blockSize - 1], scope);
-                  joinSection = joinContinuousSections(interval2, section1);
-                  break;
-                }
-                case 1: {
-                  const { range: scope, } = incompleteBlock;
-                  joinSection = joinContinuousSections(scope, section1);
-                  break;
-                }
-              }
-              if (typeof data === 'string') {
-                if (typeof figure === 'string') {
-                  switch (kind) {
-                    case 0:
-                      this.addBlock(place, joinSection, figure[0] + data[0]);
-                      this.addIncompletePart(place, block, incompleteBlockWrap);
-                      break;
-                    case 1:
-                      this.addBlock(place, joinSection, figure + data[0]);
-                      this.addIncompletePart(place, block, incompleteBlockWrap);
-                      break;
-                  }
-                  continue;
-                } else {
-                  this.addBlock(place, scope, figure);
-                  this.addSinglePart(place, section1, block);
-                }
-              }
-              if (Buffer.isBuffer(data)) {
-                if (Buffer.isBuffer(figure)) {
-                  switch (kind) {
-                    case 0:
-                      this.addBlock(place, joinSection, Buffer.concat([figure[0], data[0]]));
-                      this.addIncompletePart(place, block, incompletBlockWrap);
-                      break;
-                    case 1:
-                      this.addBlock(place, joinSection, Buffer.concat([figure, data[0]]));
-                      this.addIncompletePart(place, block, incompleteBlockWrap);
-                      break;
-                  }
-                  continue;
-                } else {
-                  this.addBlock(place, scope, figure);
-                  this.addSinglePart(place, section1, block);
-                }
-              }
+            if (incompleteRange !== undefined) {
             } else {
-              this.addSinglePart(place, section1, block);
             }
-            this.addIncompletePart(place, block, incompleteBlockWrap);
             break;
           }
           case 1: {
-            const { val: incompleteBlock, } = incompleteBlockWrap;
-            const [left, right] = range;
-            if (incompleteBlock !== undefined) {
-              if (left === 0 && right === blockSize - 1) {
-              } else if (left === 0) {
-                let joinSection;
-                switch (kind) {
-                  case 0: {
-                    const { range: scope, } = incompleteBlock;
-                    const [_, interval2] = getDifferenceSection([0, blockSize - 1], scope);
-                    joinSection = joinContinuousSections(interval2, range);
-                    break;
-                  }
-                  case 1: {
-                    const { range: scope, } = incompleteBlock;
-                    joinSection = joinContinuousSections(scope, section1);
-                    break;
-                  }
-                }
-                if (typeof data === 'string') {
-                  if (typeof figure === 'string') {
-                    switch (kind) {
-                      case 0:
-                        this.addBlock(place, joinSection, figure[0] + data);
-                        break;
-                      case 1:
-                        this.addBlock(place, joinSection, figure + data);
-                        break;
-                    }
-                    continue;
-                  } else {
-                    this.addSinglePart(place, scope, figure);
-                    this.addBlock(place, range, data);
-                  }
-                }
-                if (Buffer.isBuffer(data)) {
-                  if (Buffer.isBuffer(figure)) {
-                    switch (kind) {
-                      case 0:
-                        this.addBlock(place, joinSection, Buffer.concat([figure[0], data]));
-                        break;
-                      case 1:
-                        this.addBlock(place, joinSection, Buffer.concat([figure, data]));
-                        break;
-                    }
-                    continue;
-                  } else {
-                    this.addSinglePart(place, scope, figure);
-                    this.addBlock(place, range, data);
-                  }
-                }
-                continue;
-              } else {
-                this.addBlock(place, range, block);
-              }
-            }
             break;
           }
         }
       }
-    }
+    });
     newData.attach(place, nullDigital);
   }
 
