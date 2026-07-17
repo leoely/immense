@@ -2,6 +2,7 @@ import EventEmitter from 'events';
 import os from 'os';
 import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
+import cloneDeep from 'clone-deep';
 
 function getBetweenLength(section1, section2) {
   const [l1, r1] = sectinon1;
@@ -137,7 +138,7 @@ class StorageCache {
       throw new Error('[Error] The parameter options should be of type object.');
     }
     this.options = Object.assign(defaultOptions, options);
-    this.dealOptions();
+    this.dealOptions(this.options);
     this.getEventEmitter = false;
     this.eventEmitter = new EventEmitter();
     const {
@@ -151,7 +152,7 @@ class StorageCache {
     this.fillNumber = 0;
     this.totalNumber = 0;
     this.averageLength = 0;
-    this.minimumLength = bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
+    this.minimumLength = 5 * bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
   }
 
   addSinglePart(place, section1, block) {
@@ -167,7 +168,7 @@ class StorageCache {
   }
 
   addIncompletePart(place, block, incompleteBlockWrap) {
-    incompleteBlockWrap.val = block;
+    incompleteBlockWrap.val = cloneDeep(block);
   }
 
   anewSeparation(place, newBlockSize) {
@@ -292,7 +293,54 @@ class StorageCache {
             const { val: incompleteBlock, } = incompleteBlockWrap;
             const [left, right] = range;
             if (incompleteBlock !== undefined) {
+              const { data: kind, range: scope, data: figure, } = incompleteBlock;
               if (left === 0 && right === blockSize - 1) {
+                switch (kind) {
+                  case 0: {
+                    if (typeof data === 'string') {
+                      if (typeof figure === 'string') {
+                        incompleteBlock.type = 1;
+                        incompleteBlock.range = joinContinuousSections(scope, range);
+                        incompleteBlock.data = data[1] + figure;
+                      } else {
+                        this.addSinglePart(place, scope, figure);
+                        this.addBlock(place, range, data);
+                      }
+                      if (Buffer.isBuffer(data)) {
+                        if (Buffer.isBuffer(figure)) {
+                          incompleteBlock.type = 1;
+                          incompleteBlock.range = joinContinuousSections(scope, range);
+                          incompleteBlock.data = Buffer.concat(data[1], figure);
+                        } else {
+                          this.addSinglePart(place, scope, figure);
+                          this.addBlock(place, range, data);
+                        }
+                      }
+                    }
+                    break;
+                  }
+                  case 1: {
+                    if (typeof data === 'string') {
+                      if (typeof figure === 'string') {
+                        incompleteBlock.range = joinContinuousSections(scope, range);
+                        incompleteBlock.data = data + figure;
+                      } else {
+                        this.addSinglePart(place, scope, figure);
+                        this.addBlock(place, range, data);
+                      }
+                      if (Buffer.isBuffer(data)) {
+                        if (Buffer.isBuffer(figure)) {
+                          incompleteBlock.range = joinContinuousSections(scope, range);
+                          incompleteBlock.data = Buffer.concat(data, figure);
+                        } else {
+                          this.addSinglePart(place, scope, figure);
+                          this.addBlock(place, range, data);
+                        }
+                      }
+                    }
+                    break;
+                  }
+                }
               } else if (left === 0) {
                 let joinSection;
                 switch (kind) {
@@ -351,6 +399,9 @@ class StorageCache {
       }
     }
     newData.attach(place, nullDigital);
+    data.ruinAll();
+    this.data = newData;
+    delete this.newData;
   }
 
   transformBlocks(place, data, start) {
@@ -428,13 +479,30 @@ class StorageCache {
     const {
       averageLength,
     } = this;
-    this.averageLength = (averageLength + newAverageLength) / 2;
+    if (averageLength === 0) {
+      this.averageLength = newAverageLength;
+    } else {
+      this.averageLength = (averageLength + newAverageLength) / 2;
+    }
   }
 
   increaseFillNumber() {
     this.fillNumber += 1;
     this.updateDutyCycle();
     this.updateRate();
+    const { place, } = this;
+    if (this.greaterThresholdAndBondAndDutyCycle(place)) {
+      const { averageLength, minimumLength, } = this;
+      if (averageLength > minimumLength) {
+        this.anewSeperation(place, averageLength);
+      } else {
+        this.anewSeperation(place, minimumLength);
+      }
+      this.averageLength = 0;
+      this.fillNumber = 0;
+      this.dutyCycle = 0;
+      this.rate = 0;
+    }
   }
 
   updateRate() {
@@ -475,19 +543,17 @@ class StorageCache {
     }
   }
 
-  dealOptions() {
+  dealOptions(options) {
     const {
-      options: {
-        logLevel,
-        blockSize,
-        cacheStats,
-        cacheOwn,
-        cacheMod,
-        cacheRealpath,
-        cacheDiskOccupy,
-        bitWidth,
-      },
-    } = this;
+      logLevel,
+      blockSize,
+      cacheStats,
+      cacheOwn,
+      cacheMod,
+      cacheRealpath,
+      cacheDiskOccupy,
+      bitWidth,
+    } = options;
     if (!Number.isInteger(logLevel)) {
       throw new Error('[Error] The option logLevel should be an integer type.');
     }
@@ -572,6 +638,7 @@ class StorageCache {
     if (typeof options !== 'object' && options !== null && !Array.isArray(options)) {
       throw new Error('[Error] The parameter options should be an object type.');
     }
+    this.dealOptions(newOptions);
     const {
       data,
     } = this;
@@ -592,15 +659,15 @@ class StorageCache {
       },
     } = digital;
     const {
-        threshold: newThreshold,
-        bond: newBond,
-        dutyCycle: newDutyCycle,
-        blockSize: newBlockSize,
-        cacheStats: newCacheStats,
-        cacheOwn: newCacheOwn,
-        cacheMod: newCacheMod,
-        cacheRealpath: newCacheRealpath,
-        cacheDiskOccupy: newCacheDiskOccupy,
+      threshold: newThreshold,
+      bond: newBond,
+      dutyCycle: newDutyCycle,
+      blockSize: newBlockSize,
+      cacheStats: newCacheStats,
+      cacheOwn: newCacheOwn,
+      cacheMod: newCacheMod,
+      cacheRealpath: newCacheRealpath,
+      cacheDiskOccupy: newCacheDiskOccupy,
     } = newOptions;
     if (threshold !== newThreshold) {
       this.rate = 0;
