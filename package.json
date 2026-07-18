@@ -30,6 +30,6 @@
     "diskusage": "^1.2.0",
     "fulmination": "^1.1.31",
     "gulp": "^5.0.1",
-    "manner.js": "^1.1.0"
+    "manner.js": "^1.1.4"
   }
 }

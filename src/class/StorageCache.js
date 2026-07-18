@@ -2,7 +2,15 @@ import EventEmitter from 'events';
 import os from 'os';
 import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
+import {
+  checkLogPath,
+  addToLog,
+  appendToLog,
+  logOutOfMemory,
+  getGTMNowString,
+} from 'manner.js/server';
 import cloneDeep from 'clone-deep';
+import radixSort from '~/lib/util/radixSort';
 
 function getBetweenLength(section1, section2) {
   const [l1, r1] = sectinon1;
@@ -119,6 +127,12 @@ function getBitWidth() {
   }
 }
 
+function checkAmountsNotNull(count, place) {
+  if (count.gain(place) === undefined){
+    count.attach(place, { amounts: [], orders: [], outOfOrder: false, });
+  }
+}
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -132,6 +146,7 @@ class StorageCache {
       cacheMod: false,
       cacheRealpath: false,
       cacheDiskOccupy: false,
+      logPath: '/var/log/immense.js',
     };
     defaultOptions.bitWidth = getBitWidth();
     if (typeof options !== 'object' && options !== null) {
@@ -147,12 +162,73 @@ class StorageCache {
       },
     } = this;
     this.data = new FileRouter({ logLevel, debug: false, hideError: true, });
+    this.count = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
     this.startTime = Date.now();
     this.place = '';
     this.fillNumber = 0;
     this.totalNumber = 0;
     this.averageLength = 0;
     this.minimumLength = 5 * bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
+    this.checkMemory();
+  }
+
+  countSection(place, section) {
+    const {
+      count,
+    } = this;
+    checkAmountsNotNull(count, place);
+    const quantity = count.gain(place);
+    const { amounts, } = quantity;
+    const [l, r] = section;
+    for (let i = l; i <= r; i += 1) {
+      if (amounts[i] === undefined) {
+        amounts[i] = 0;
+      }
+      amounts[i] += 1;
+    }
+    quantity.outOfOrdder = true;
+    this.checkMemory();
+  }
+
+  sortOrders(place) {
+    const {
+      count,
+    } = this;
+    const quantity = count.gain(place);
+    const {
+      counts,
+    } = quantity;
+    const { counts, } = this;
+    quantity.orders = counts.map((e, i) => [e, i]);
+    quantity.orders = radixSort(this.orders);
+    quantity.outOfOrder = false;
+    this.checkMemory();
+  }
+
+  checkMemory() {
+    const {
+      temporaryMemorySwitch,
+    } = this;
+    let freemem = os.freemem();
+    if (temporaryMemorySwitch === true) {
+      freemem = 0;
+    }
+    let ans = false;
+    if (freemem > 0) {
+      ans = true;
+    } else {
+      const {
+        options: {
+          debug,
+          logPath,
+        },
+        constructor: {
+          name,
+        },
+      } = this;
+      logOutOfMemory(logPath, freemem);
+    }
+    return ans;
   }
 
   addSinglePart(place, section1, block) {
@@ -402,6 +478,7 @@ class StorageCache {
     data.ruinAll();
     this.data = newData;
     delete this.newData;
+    this.checkMemory();
   }
 
   transformBlocks(place, data, start) {
@@ -471,8 +548,10 @@ class StorageCache {
   emptyCache() {
     const {
       data,
+      count,
     } = this;
     data.ruinAll();
+    count.ruinAll();
   }
 
   updateAverageLength(newAverageLength) {
@@ -717,6 +796,7 @@ class StorageCache {
       }
     }
     digital.options = newOptions;
+    this.checkMemory();
   }
 
   updateOwn(place, uid, gid) {
@@ -853,6 +933,7 @@ class StorageCache {
       data,
     } = this;
     data.attach(targetPlace, sourcePlace);
+    this.checkMemory();
   }
 
   getLinkPlace(place) {
@@ -908,6 +989,7 @@ class StorageCache {
         nullDigital[diskOccupy] = -1;
       }
       data.attach(place, nullDigital);
+      this.checkMemory();
     }
   }
 
@@ -1246,6 +1328,7 @@ class StorageCache {
       }
     }
     this.postOperation();
+    this.checkMemory();
   }
 
   addGroupBlocks(place, ranges, figures) {
@@ -1334,6 +1417,7 @@ class StorageCache {
       }
       chunks[index] = { type: 1, range, data, };
     });
+    this.checkMemory();
   }
 
   checkRangeContent(range) {
@@ -1527,6 +1611,32 @@ class StorageCache {
         this.removeFullBlock(chunks, count, ptr - blockSize, ptr);
       }
     }
+    const {
+      count,
+    } = this;
+    const quantity = count.gain(place);
+    const {
+      counts,
+    } = quantity;
+    const {
+      length,
+    } = counts;
+    const [left, right] = range;
+    for (let i = left; i <= right; i += 1) {
+      if (i === length - 1) {
+        let number = 0;
+        for (let j = 0; j >= 0; j -= 1) {
+          if (counts[j] === 0 || counts[j] === undefined) {
+            number += 1;
+          } else {
+            break;
+          }
+        }
+        counts.length = length - number;
+      } else {
+        delete counts[j];
+      }
+    }
     this.postOperation();
   }
 
@@ -1647,6 +1757,7 @@ class StorageCache {
         ans.push(this.getBlock(chunk, ptr - blockSize, ptr));
       }
     }
+    this.countSection(place, range);
     this.postOperation();
     return ans;
   }
