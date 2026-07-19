@@ -9,7 +9,6 @@ import {
   logOutOfMemory,
   getGTMNowString,
 } from 'manner.js/server';
-import cloneDeep from 'clone-deep';
 import radixSort from '~/lib/util/radixSort';
 
 function getBetweenLength(section1, section2) {
@@ -132,6 +131,25 @@ function checkAmountsNotNull(count, place) {
     count.attach(place, { amounts: [], orders: [], outOfOrder: false, });
   }
 }
+function getStringOccupy(length) {
+  return (length + 1) * 4 * 8;
+}
+
+function getBufferOccupy(length) {
+  return length * 8;
+}
+
+function getDataOccupy(data) {
+  const {
+    length,
+  } = data;
+  if (typeof data === 'string') {
+    return (length + 1) * 4 * 8;
+  }
+  if (Buffer.isBuffer(data)) {
+    return length * 8;
+  }
+}
 
 class StorageCache {
   constructor(options) {
@@ -170,6 +188,18 @@ class StorageCache {
     this.averageLength = 0;
     this.minimumLength = 5 * bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
     this.checkMemory();
+  }
+
+  getBlockOccupy(block) {
+    const { type, range, data, } = block;
+    const {
+      length,
+    } = range;
+    const objectOccupy = this.getArrayOccupy(5) + this.getPointerOccupy();
+    const rangeOccupy = this.getArrayOccupy(length);
+    const typeOccupy = this.getIntegerOccupy();
+    const dataOccupy = getDataOccupy(data);
+    return bitToByte(objectOccupy + rangeOccupy + typeOccupy + dataOccupy);
   }
 
   countSection(place, section) {
@@ -244,7 +274,7 @@ class StorageCache {
   }
 
   addIncompletePart(place, block, incompleteBlockWrap) {
-    incompleteBlockWrap.val = cloneDeep(block);
+    incompleteBlockWrap.val = block;
   }
 
   anewSeparation(place, newBlockSize) {
@@ -489,6 +519,7 @@ class StorageCache {
       throw new Error('[Error] The parameter start should be of integer type.');
     }
     this.checkNotNull(place);
+    place = this.getLinkPlace(place);
     const {
       data: figure,
     } = this;
@@ -525,6 +556,15 @@ class StorageCache {
       throw new Error('[Error] The parameter data should be of string type or buffer type.');
     }
     return blocks;
+  }
+
+  getIntegerOccupy() {
+    const {
+      options: {
+        bitWidth,
+      },
+    } = this;
+    return bitWidth;
   }
 
   getPointerOccupy() {
@@ -1055,10 +1095,25 @@ class StorageCache {
     }
     const interval = this.getBlockInterval(range);
     const [head, tail] = interval;
+    const {
+      length,
+    } = block.data;
     if (typeof data === 'string') {
+      const occupy1 = getStringOccupy(length);
+      const occupy2 = getStringOccupy(getSectionLength(interval));
+      if (occupy2 > occupy1) {
+        const { place, } = this;
+        this.releaseOccupy(place, occupy2 - occupy1);
+      }
       block.data = data.substring(head, tail + 1);
     }
     if (Buffer.isBuffer(data)) {
+      const occupy1 = getBufferOccupy(length);
+      const occupy2 = getBufferOccupy(getSectionLength(interval));
+      if (occupy2 > occupy1) {
+        const { place, } = this;
+        this.releaseOccupy(place, occupy2 - occupy1);
+      }
       block.data = data.subarray(head, tail + 1);
     }
   }
@@ -1075,19 +1130,44 @@ class StorageCache {
     }
   }
 
-  setReverseBlock(block, kind, data, range) {
+  setReverseBlock(block, kind, figure, range) {
     const [begin, end] = range;
     if (begin === 0) {
+      const {
+        data: {
+          length,
+        },
+      } = data;
       switch (kind) {
         case 0: {
-          block.data = [block.data, this.getData(data, begin, end)];
+          this.releaseJoinStringOccupy(length, interval);
+          block.data = [block.data, this.getData(figure, begin, end)];
           break;
         }
         case 1: {
-          block.data = [this.getData(data, begin, end), block.data];
+          this.releaseJoinBufferOccupy(length, interval);
+          block.data = [this.getData(figure, begin, end), block.data];
           break;
         }
       }
+    }
+  }
+
+  releaseJoinStringOccupy(length, section) {
+    const occupy1 = getStringOccupy(length);
+    const occupy2 = getStringOccupy(getSectionLength(section)) + occupy1;
+    if (occupy2 > occupy1) {
+      const { place, } = this;
+      this.releaseOccupy(place, occupy2 - occupy1);
+    }
+  }
+
+  releaseInterStringOccupy(length, interval2) {
+    const occupy1 = getStringOccupy(length);
+    const occupy2 = getStringOccupy(getSectionLength(section)) + occupy1;
+    if (occupy2 > occupy1) {
+      const { place, } = this;
+      this.releaseOccupy(place, occupy2 - occupy1);
     }
   }
 
@@ -1110,21 +1190,30 @@ class StorageCache {
     }
     const interval2 = this.getBlockInterval(extend);
     const [head2, tail2] = interval2;
+    const {
+      data: {
+        length,
+      }
+    } = block;
     switch (type) {
       case 0:
-        if (Buffer.isBuffer(data)) {
-          block.data = Buffer.concat([data.subarray(head2, tail2 + 1), block.data]);
-        }
         if (typeof data === 'string') {
+          this.releaseInterStringOccupy(length, interval2);
           block.data = data.substring(head2, tail2 + 1) + block.data;
+        }
+        if (Buffer.isBuffer(data)) {
+          this.releaseInterBufferOccupy(length, interval2);
+          block.data = Buffer.concat([data.subarray(head2, tail2 + 1), block.data]);
         }
         break;
       case 1:
-        if (Buffer.isBuffer(data)) {
-          block.data = Buffer.concat([block.data, data.subarray(head2, tail2 + 1)]);
-        }
         if (typeof data === 'string') {
+          this.releaseInterStringOccupy(length, interval2);
           block.data = block.data + data.substring(head2, tail2 + 1);
+        }
+        if (Buffer.isBuffer(data)) {
+          this.releaseInterBufferOccupy(length, interval2);
+          block.data = Buffer.concat([block.data, data.subarray(head2, tail2 + 1)]);
         }
         break;
     }
@@ -1228,7 +1317,7 @@ class StorageCache {
     const [head, tail] = interval;
     if (Buffer.isBuffer(data)) {
       for (let i = head; i <= tail; i += 1) {
-        digital[type][i] = data[i];
+        digital[i] = data[i];
       }
     }
     if (typeof data === 'string') {
@@ -1393,6 +1482,26 @@ class StorageCache {
     });
   }
 
+  releaseOccupy(place, occupy) {
+    this.sortOrders(place);
+    const {
+      count,
+    } = this;
+    const quantity = count.gain(place);
+    const {
+      orders,
+    } = quantity;
+    for (let i = 0; i < orders.length; i += 1) {
+      const [_, idx] = orders[i];
+      const block = blocks[idx];
+      this.clearBlock(place, idx);
+      occupy -= this.getBlockOccupy(block);
+      if (occupy <= 0) {
+        break;
+      }
+    }
+  }
+
   overlapBlocks(place, blocks) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
@@ -1410,14 +1519,20 @@ class StorageCache {
       blocks: chunks,
     } = digital;
     this.checkBlocksContent(blocks);
-    blocks.forEach(([type, index, range, data]) => {
+    if (!this.checkMemory()) {
+      let blocksOccupy = 0;
+      blocks.forEach((block) => {
+        blocksOccupy += this.getBlockOccupy(block);
+      });
+      this.releaseOccupy(place, blocksOccupy);
+    }
+    blocks.forEach(({ type, range, data, }) => {
       const chunk = chunks[index];
       if (chunk === undefined) {
         throw new Error('[Error] The previous block does not exist,confirming the operation was correct.');
       }
       chunks[index] = { type: 1, range, data, };
     });
-    this.checkMemory();
   }
 
   checkRangeContent(range) {
@@ -1560,6 +1675,52 @@ class StorageCache {
     }
   }
 
+  clearBlocks(place, indexs) {
+    if (typeof place !== 'string') {
+      throw new Error('[Error] The parameter place should be a string type.');
+    }
+    if (Array.isArray(indexs)) {
+      throw new Error('[Error] The parameter indexs should be an array type.');
+    }
+    indexs.forEach((index) => {
+      this.clearBlock(place, index);
+    });
+  }
+
+  clearBlock(place, index) {
+    if (!Number.isInteger(index)) {
+      throw new Error('[Error] The parameter index should be an integer type.');
+    }
+    if (index >= 0) {
+      throw new Error('[Error] The parameter index should be greater than or equal to zero.')
+    }
+    place = this.getLinkPlace();
+    this.check
+    const {
+      data,
+    } = this;
+    const digital = data.gain(place);
+    const { blocks, } = digital;
+    const {
+      length,
+    } = blocks;
+    indexs.forEach((index) => {
+      if (index === length - 1) {
+        let number = 0;
+        for (let i = 0; i >= 0; i -= 1) {
+          if (blocks === undefined) {
+            number += 1;
+          } else {
+            break;
+          }
+        }
+        blocks.length = length - number;
+      } else {
+        delete counts[id];
+      }
+    });
+  }
+
   removeBlocks(place, range, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
@@ -1669,7 +1830,16 @@ class StorageCache {
     const range = [begin, end];
     const { place, } = this;
     const differentSections = getDifferenceSection(range, scope);
-    differentSections.forEach(([left, right]) => {
+    differentSections.forEach((section) => {
+      const section = [left, right];
+      let occupy;
+      if (typeof block === 'string') {
+        occupy = getStringOccupy(getSectionLength(section));
+      }
+      if (Buffer.isBuffer(block)) {
+        occupy = getBufferOccupy(getSectionLength(section));
+      }
+      this.releaseOccupy(place, occupy);
       const figure = this.requestStorageData(place, left, rigth);
       this.adjunctionBlock(block, figure, left, right);
     });
