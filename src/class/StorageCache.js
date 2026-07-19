@@ -190,6 +190,13 @@ class StorageCache {
     this.checkMemory();
   }
 
+  setTemporaryMemorySwitch(temporaryMemorySwitch) {
+    if (typeof temporaryMemorySwtich !== 'boolean') {
+      throw new Error('[Error] Parameter temporaryMemorySwtich should be of boolean type.');
+    }
+    this.temporaryMemorySwitch = temporaryMemorySwitch;
+  }
+
   getBlockOccupy(block) {
     const { type, range, data, } = block;
     const {
