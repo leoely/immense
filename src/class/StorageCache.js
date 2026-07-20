@@ -176,7 +176,6 @@ class StorageCache {
     }
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions(this.options);
-    this.getEventEmitter = false;
     this.eventEmitter = new EventEmitter();
     const {
       options: {
@@ -192,6 +191,45 @@ class StorageCache {
     this.averageLength = 0;
     this.minimumLength = 5 * bitToByte(this.getArrayOccupy(5) + 6 * this.getPointerOccupy());
     this.checkMemory();
+  }
+
+  bindEvent() {
+    const {
+      eventEmitter,
+      options: {
+        cacheStats,
+        cacheOwn,
+        cacheMod,
+        cacheRealpath,
+      },
+    } = this;
+    eventEmitter.addEventListener('getCache', (place, stats) => {
+      if (cacheOwn === true) {
+        this.updateOwn(place, uid, gid);
+      }
+      delete stats.uid;
+      delete stats.gid;
+      if (cacheMod === true) {
+        this.updateMod(place, mod);
+      }
+      delete stats.mode;
+      this.updateStats(stats);
+    });
+    eventEmitter.addEventListener('updateStats', (place, stats) => {
+      delete stats.uid;
+      delete stats.gid;
+      delete stats.mode;
+      this.updateStats(place, stats);
+    });
+    eventEmitter.addEventListener('updateOwn', (place, stats) => {
+      this.updateOwn(place, uid, gid);
+    });
+    eventEmitter.addEventListener('updateMod', (place, mod) => {
+      this.updateOwn(place, mod);
+    });
+    eventEmitter.addEventListener('updateRealpath', (place, mod) => {
+      this.updateOwn(place, realpath);
+    });
   }
 
   setTemporaryMemorySwitch(temporaryMemorySwitch) {
