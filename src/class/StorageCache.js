@@ -103,6 +103,9 @@ function bitToByte(bit) {
   if (!Number.isInteger(bit)) {
     throw new Error('[Error] The parameter bit should be of integer type.');
   }
+  if (!(bit > 0)) {
+    throw new Error('[Error] The parameter bit should be of positive integer type.');
+  }
   const byte = bit / 8;
   if (!Number.isInteger(byte)) {
     throw new Error('[Error] The calculated number of bytes should be an integer.')
@@ -165,6 +168,7 @@ class StorageCache {
       cacheRealpath: false,
       cacheDiskOccupy: false,
       logPath: '/var/log/immense.js',
+      safeMemoryCapacity: 4 * 1024 * 1024 * 1024,
     };
     defaultOptions.bitWidth = getBitWidth();
     if (typeof options !== 'object' && options !== null) {
@@ -245,13 +249,20 @@ class StorageCache {
   checkMemory() {
     const {
       temporaryMemorySwitch,
+      safeMemeoryCapacity,
     } = this;
+    let capacity;
+    if (safeMemoryCapacity === undefined) {
+      capacity = 0;
+    } else {
+      capacity = safeMemoryCapacity;
+    }
     let freemem = os.freemem();
     if (temporaryMemorySwitch === true) {
-      freemem = 0;
+      freemem = capacity;
     }
     let ans = false;
-    if (freemem > 0) {
+    if (freemem > capacity) {
       ans = true;
     } else {
       const {
@@ -525,6 +536,9 @@ class StorageCache {
     if (!Number.isInteger(start)) {
       throw new Error('[Error] The parameter start should be of integer type.');
     }
+    if (!(start > 0)) {
+      throw new Error('[Error] The parameter start should be of positive integer type.');
+    }
     this.checkNotNull(place);
     place = this.getLinkPlace(place);
     const {
@@ -671,6 +685,9 @@ class StorageCache {
 
   dealOptions(options) {
     const {
+      threshold,
+      bond,
+      dutyCycle,
       logLevel,
       blockSize,
       cacheStats,
@@ -679,7 +696,23 @@ class StorageCache {
       cacheRealpath,
       cacheDiskOccupy,
       bitWidth,
+      safeMemoryCapacity,
     } = options;
+    if (threshold !== undefined) {
+      if (typeof threshold !== 'number') {
+        throw new Error('[Error] The option threshold should be a number type.');
+      }
+    }
+    if (bond !== undefined) {
+      if (!Number.isInteger(bond)) {
+        throw new Error('[Error] The option bond should be an integer type.');
+      }
+    }
+    if (dutyCycle !== undefined) {
+      if (typeof threshold !== 'number') {
+        throw new Error('[Error] The option dutyCycle should be a number type.');
+      }
+    }
     if (!Number.isInteger(logLevel)) {
       throw new Error('[Error] The option logLevel should be an integer type.');
     }
@@ -703,6 +736,15 @@ class StorageCache {
     }
     if (!Number.isInteger(bitWidth)) {
       throw new Error('[Error] The option bitWidth should be a integer type.');
+    }
+    if (!(bitWidth > 0)) {
+      throw new Error('[Error] The option bitWidth should be a positive integer.');
+    }
+    if (!Number.isInteger(safeMemoryCapacity)) {
+      throw new Error('[Error] The option safeMemoryCapacity should be a integer type.');
+    }
+    if (!(safeMemoryCapacity > 0)) {
+      throw new Error('[Error] The option safeMemoryCapacity should be a positive integer.');
     }
   }
 
@@ -1045,8 +1087,14 @@ class StorageCache {
       if (!Number.isInteger(type)) {
         throw new Error('[Error] The type parameter of the ' + idx + ' block should be an integer type.');
       }
+      if (!(type > 0)) {
+        throw new Error('[Error] The type parameter of the ' + idx + ' block should be a positive integer type.');
+      }
       if (!Number.isInteger(index)) {
         throw new Error('[Error] The index parameter of the ' + idx + ' block should be an integer type.');
+      }
+      if (!(index > 0)) {
+        throw new Error('[Error] The index parameter of the ' + idx + ' block should be a positive integer type.');
       }
       if (!Array.isArray(range)) {
         throw new Error('[Error] The range parameter of the ' + idx + ' block should be an array type.');
@@ -1058,8 +1106,14 @@ class StorageCache {
       if (!Number.isInteger(start)) {
         throw new Error('[Error] The start parameter of the ' + idx + ' block should be an integer type.');
       }
+      if (!(start > 0)) {
+        throw new Error('[Error] The start parameter of the ' + idx + ' block should be a positive integer type.');
+      }
       if (!Number.isInteger(end)) {
         throw new Error('[Error] The end parameter of the ' + idx + ' block should be an integer type.');
+      }
+      if (!(end > 0)) {
+        throw new Error('[Error] The end parameter of the ' + idx + ' block should be a positive integer type.');
       }
     });
   }
@@ -1550,8 +1604,14 @@ class StorageCache {
     if (!Number.isInteger(start)) {
       throw new Error('[Error] The start parameter of the ' + idx + ' range should be an integer type.');
     }
+    if (!(start > 0)) {
+      throw new Error('[Error] The start parameter of the ' + idx + ' range should be a positive integer type.');
+    }
     if (!Number.isInteger(end)) {
       throw new Error('[Error] The end parameter of the ' + idx + ' range should be an integer type.');
+    }
+    if (!(end > 0)) {
+      throw new Error('[Error] The end parameter of the ' + idx + ' range should be a positive integer type.');
     }
     if (start > end) {
       throw new Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');

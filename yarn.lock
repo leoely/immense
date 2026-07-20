@@ -1661,10 +1661,10 @@
   resolved "https://registry.yarnpkg.com/@unrs/resolver-binding-win32-x64-msvc/-/resolver-binding-win32-x64-msvc-1.12.2.tgz#72da0da48d72b1e87831b9c0308931d3f4669027"
   integrity sha512-nAB74NfSNKknqQ1RrYj6uz8FcXEomu/MATJZxh/x+BArzN2U3JbOYC0APYzUIGhVY3m5hRxA8VPNdPBoG8txlA==
 
-advising.js@^1.1.3:
-  version "1.1.3"
-  resolved "https://registry.yarnpkg.com/advising.js/-/advising.js-1.1.3.tgz#6b5d3bafc2d477f90453f76257668bc7763887c4"
-  integrity sha512-5BoHNzg2zLh95wUlQHxhRLQb1oiBbScXcD9CpXoAgWEerVw2TCa04XmK0a2BVRpRTDAsEvKFwOOpK19lvklLXA==
+advising.js@^1.2.2:
+  version "1.2.2"
+  resolved "https://registry.yarnpkg.com/advising.js/-/advising.js-1.2.2.tgz#848bd1eeccbf03b52239c001f8725e52db930ee0"
+  integrity sha512-l45Oxss+99hFRCqgiGQAhLhqpLnfo9XdxfBLqqoUUx0f79s/K1gozo6RHB2lR8s3CcwLJlEn3RhT5LKAjf+U1w==
   dependencies:
     fulmination "^1.1.31"
     gulp "^5.0.1"
