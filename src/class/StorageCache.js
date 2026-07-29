@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import net from 'net';
 import os from 'os';
 import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
@@ -154,6 +154,33 @@ function getDataOccupy(data) {
   }
 }
 
+function getBinBuf(params) {
+  if (!Array.isArray(params)) {
+    throw new Error('[Error] The params parameter should be an array type.');
+  }
+  const { length, } = params;
+  if (length <= 1) {
+    throw new Error('[Error] The length of the params parameter should be greater than or equal to two');
+  }
+  const pbytes = [];
+  params.forEach((param) => {
+    switch (typeof param) {
+      case 'string':
+        pbytes.push(Array.from(Buffer.from(param)));
+        break;
+      case 'number':
+        if (!Number.isInteger(param)) {
+          throw new Error('[Error] If the param type is a number, ite should be an integer.');
+        }
+        pbytes.push(Array.from(nonZeroByteArray.fromInt(param)));
+        break;
+    }
+    pbytes.push(0);
+  });
+  const buf = Buffer.from(pbytes.flat());
+  return buf;
+}
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -169,6 +196,8 @@ class StorageCache {
       cacheDiskOccupy: false,
       logPath: '/var/log/immense.js',
       safeMemoryCapacity: 4 * 1024 * 1024 * 1024,
+      storagePort: 7000,
+      storageIp: '127.0.0.1',
     };
     defaultOptions.bitWidth = getBitWidth();
     if (typeof options !== 'object' && options !== null) {
@@ -176,7 +205,6 @@ class StorageCache {
     }
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions(this.options);
-    this.eventEmitter = new EventEmitter();
     const {
       options: {
         logLevel,
@@ -193,9 +221,29 @@ class StorageCache {
     this.checkMemory();
   }
 
+  async setUpStorageClient() {
+    try {
+      const {
+        storageIp,
+        storagePort,
+      }
+      this.storageClient = await new Promise((resolve, reject) => {
+        const client = net.createConnection(storagePort, storageIp, () => {
+          client.ip = ip;
+          client.port = port;
+        });
+        client.on('close', () => {
+          const { ip, port, } = lient;
+        });
+        resolve(client);
+      });
+    } catch (error) {
+    }
+  }
+
   bindEvent() {
     const {
-      eventEmitter,
+      storageClient,
       options: {
         cacheStats,
         cacheOwn,
@@ -203,6 +251,9 @@ class StorageCache {
         cacheRealpath,
       },
     } = this;
+    storageClient.on('data', () => {
+      this.dealStorageClientBuf(data);
+    });
     eventEmitter.addEventListener('getCache', (place, stats) => {
       if (cacheOwn === true) {
         this.updateOwn(place, uid, gid);
@@ -735,6 +786,8 @@ class StorageCache {
       cacheDiskOccupy,
       bitWidth,
       safeMemoryCapacity,
+      storageIp,
+      storagePort,
     } = options;
     if (threshold !== undefined) {
       if (typeof threshold !== 'number') {
@@ -784,10 +837,15 @@ class StorageCache {
     if (!(safeMemoryCapacity > 0)) {
       throw new Error('[Error] The option safeMemoryCapacity should be a positive integer.');
     }
-  }
-
-  getEventEmitter() {
-    return this.eventEmitter;
+    if (!Number.isInteger(storagePort)) {
+      throw new Error('[Error] The option storagePort should be a integer type.');
+    }
+    if (!(storagePort > 0)) {
+      throw new Error('[Error] The option storagePort should be a positive integer.');
+    }
+    if (typeof storageIp !== 'string') {
+      throw new Error('[Error] The option storageIp should be of string type.');
+    }
   }
 
   greaterThresholdAndBondAndDutyCycle(place) {
@@ -1387,7 +1445,6 @@ class StorageCache {
     } else {
       const length1 = getBetweenLength(section1, range);
       const length2 = getBetweenLength(range, section2);
-      const { eventEmitter, } = this;
       if (length1 <= length2) {
         const fillSection = [right + 1, right + 1 + length];
         block.range = [end + 1, right];
@@ -1855,7 +1912,7 @@ class StorageCache {
     if (end < ((begin + 1) * blockSize)) {
       const chunk = chunks[begin];
       this.removeBeginBlock(chunks, begin, begin, end);
-      return;
+      return;Connection
     } else {
       const chunk = chunks[begin];
       if (start === 0) {
@@ -1920,14 +1977,50 @@ class StorageCache {
     });
   }
 
-  requestStorageData(place, left, right) {
-    let figure;
-    eventEmitter.on('giveData', (data) => figure = data);
-    eventEmitter.emit('requestData', place, left, right);
-    if (figure === undefined) {
-      throw new Error('[Error] The process of processing the fill data was omitted.')
+  dealStorageClientBuf(buf, connection) {
+    const segments = [];
+    let s = 0;
+    for (let i = 0; i < buf.length; i += 1) {
+      if (buf[i] === 0) {
+        segments.push(buf.slice(s, i));
+        s = i + 1;
+      }
     }
-    return figure;
+    const bigInt1 = nonZeroByteArray.toInt(segments.shift());
+    const code = Number(bigInt1);
+    let params;
+    switch (code) {
+      case 0:
+      case 4:
+      case 5:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return nonZeroByteArray.toInt(segment);
+            default:
+              return segment.toString();
+          }
+        });
+        break;
+      case 1:
+      case 2:
+      case 3:
+        params = segments.map((segment, index) => {
+          return segment.toString();
+        });
+        break;
+    }
+  }
+
+
+  async requestStorageData(place, left, right) {
+    const { storageClient, } = this;
+    storageClient.write(getBinBuf([0, place, left, right]));
+    await new Promise((resolve, reject) => {
+      storageClient.on('data', (data) => {
+        resolve(data);
+      });
+    });
   }
 
   getSingleBlock(block, begin, end) {
