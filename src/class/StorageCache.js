@@ -181,6 +181,53 @@ function getBinBuf(params) {
   return buf;
 }
 
+function dealStorageCacheConnectionBuf(buf, connection) {
+    const segments = [];
+    let s = 0;
+    for (let i = 0; i < buf.length; i += 1) {
+      if (buf[i] === 0) {
+        segments.push(buf.slice(s, i));
+        s = i + 1;
+      }
+    }
+    const bigInt1 = nonZeroByteArray.toInt(segments.shift());
+    const code = Number(bigInt1);
+    let params;
+    switch (code) {
+      case 0:
+      case 1:
+      case 2:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+            default:
+              return JSON.stringify(segment.toString());
+          }
+        });
+        break;
+      case 3:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+            default:
+              return nonZeroByteArray.toInt(segment);
+          }
+        });
+      case 4:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+            default:
+              return segment.toString();
+          }
+        });
+        break;
+    }
+  }
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -203,6 +250,7 @@ class StorageCache {
     if (typeof options !== 'object' && options !== null) {
       throw new Error('[Error] The parameter options should be of type object.');
     }
+    this.defaultOptions = defaultOptions;
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions(this.options);
     const {
@@ -226,7 +274,7 @@ class StorageCache {
       const {
         storageIp,
         storagePort,
-      }
+      } = this;
       this.storageClient = await new Promise((resolve, reject) => {
         const client = net.createConnection(storagePort, storageIp, () => {
           client.ip = ip;
@@ -241,46 +289,52 @@ class StorageCache {
     }
   }
 
-  bindEvent() {
-    const {
-      storageClient,
-      options: {
-        cacheStats,
-        cacheOwn,
-        cacheMod,
-        cacheRealpath,
-      },
-    } = this;
-    storageClient.on('data', () => {
-      this.dealStorageClientBuf(data);
-    });
-    eventEmitter.addEventListener('getCache', (place, stats) => {
-      if (cacheOwn === true) {
-        this.updateOwn(place, uid, gid);
-      }
-      delete stats.uid;
-      delete stats.gid;
-      if (cacheMod === true) {
-        this.updateMod(place, mod);
-      }
-      delete stats.mode;
-      this.updateStats(stats);
-    });
-    eventEmitter.addEventListener('updateStats', (place, stats) => {
-      delete stats.uid;
-      delete stats.gid;
-      delete stats.mode;
-      this.updateStats(place, stats);
-    });
-    eventEmitter.addEventListener('updateOwn', (place, stats) => {
+  async setUpStorageCacheServer() {
+    try {
+      const {
+        tables: {
+          length,
+        },
+      } = this;
+      this.server = await new Promise((resolve, reject) => {
+        const server = net.createServer((connection) => {
+          connection.on('data', (buf) => {
+            dealStorageCacheConnectionBuf(buf, connection);
+          });
+          this.connection = connection;
+          resolve(server);
+        });
+        const { port, } = this;
+        server.on('error', (error) => {
+          throw error;
+        });
+        server.listen(port);
+      });
+      const { server, } = this;
+      this.checkMemory();
+      return server;
+    } catch (error) {
+    }
+  }
+
+  getCache(place, stats) {
+    if (cacheOwn === true) {
       this.updateOwn(place, uid, gid);
-    });
-    eventEmitter.addEventListener('updateMod', (place, mod) => {
-      this.updateOwn(place, mod);
-    });
-    eventEmitter.addEventListener('updateRealpath', (place, mod) => {
-      this.updateOwn(place, realpath);
-    });
+    }
+    delete stats.uid;
+    delete stats.gid;
+    if (cacheMod === true) {
+      this.updateMod(place, mod);
+    }
+    delete stats.mode;
+    this.updateStats(stats);
+  }
+
+  renewStats(place, stats) {
+    delete stats.uid;
+    delete stats.gid;
+    delete stats.mode;
+    this.updateStats(place, stats);
   }
 
   setTemporaryMemorySwitch(temporaryMemorySwitch) {
@@ -328,7 +382,6 @@ class StorageCache {
     const {
       counts,
     } = quantity;
-    const { counts, } = this;
     quantity.orders = counts.map((e, i) => [e, i]);
     quantity.orders = radixSort(this.orders);
     quantity.outOfOrder = false;
@@ -338,7 +391,7 @@ class StorageCache {
   checkMemory() {
     const {
       temporaryMemorySwitch,
-      safeMemeoryCapacity,
+      safeMemoryCapacity,
     } = this;
     let capacity;
     if (safeMemoryCapacity === undefined) {
@@ -899,9 +952,13 @@ class StorageCache {
       throw new Error('[Error] The parameter place should be a string type.');
     }
     place = this.getLinkPlace(place);
-    if (typeof options !== 'object' && options !== null && !Array.isArray(options)) {
-      throw new Error('[Error] The parameter options should be an object type.');
+    if (typeof newOptions !== 'object' && newOptions !== null && !Array.isArray(newOptions)) {
+      throw new Error('[Error] The parameter newOptions should be an object type.');
     }
+    const {
+      defaultOptions,
+    } = this;
+    newOptions = Object.assign(defaultOptions, newOptions);
     this.dealOptions(newOptions);
     const {
       data,
@@ -939,7 +996,7 @@ class StorageCache {
     if (bond !== newBond) {
       this.fillNumber = 0;
     }
-    if (dutyCycle !== newDutyeCycle) {
+    if (dutyCycle !== newDutyCycle) {
       this.dutyCyle = 0;
     }
     if (blockSize !== newBlockSize) {
@@ -966,7 +1023,7 @@ class StorageCache {
         delete digital.mod;
       }
     }
-    if (cacheRealPath !== newCacheRealpath) {
+    if (cacheRealpath !== newCacheRealpath) {
       if (newCacheRealpath) {
         digital.realpath = '';
       } else {
@@ -1922,16 +1979,16 @@ class StorageCache {
       }
     }
     let ptr = (begin + 1) * blockSize;
-    let count = begin + 1;
+    let number = begin + 1;
     while (true) {
       ptr += blockSize;
       if (ptr >= end) {
-        const chunk = chunks[count];
-        this.removeEndBlock(chunks, count, ptr - blockSize, end);
+        const chunk = chunks[number];
+        this.removeEndBlock(chunks, number, ptr - blockSize, end);
         break;
       } else {
-        const chunk = chunks[count];
-        this.removeFullBlock(chunks, count, ptr - blockSize, ptr);
+        const chunk = chunks[number];
+        this.removeFullBlock(chunks, number, ptr - blockSize, ptr);
       }
     }
     const {
@@ -1977,50 +2034,15 @@ class StorageCache {
     });
   }
 
-  dealStorageClientBuf(buf, connection) {
-    const segments = [];
-    let s = 0;
-    for (let i = 0; i < buf.length; i += 1) {
-      if (buf[i] === 0) {
-        segments.push(buf.slice(s, i));
-        s = i + 1;
-      }
-    }
-    const bigInt1 = nonZeroByteArray.toInt(segments.shift());
-    const code = Number(bigInt1);
-    let params;
-    switch (code) {
-      case 0:
-      case 4:
-      case 5:
-        params = segments.map((segment, index) => {
-          switch (index) {
-            case 0:
-              return nonZeroByteArray.toInt(segment);
-            default:
-              return segment.toString();
-          }
-        });
-        break;
-      case 1:
-      case 2:
-      case 3:
-        params = segments.map((segment, index) => {
-          return segment.toString();
-        });
-        break;
-    }
-  }
-
-
   async requestStorageData(place, left, right) {
     const { storageClient, } = this;
     storageClient.write(getBinBuf([0, place, left, right]));
-    await new Promise((resolve, reject) => {
+    const data = await new Promise((resolve, reject) => {
       storageClient.on('data', (data) => {
         resolve(data);
       });
     });
+    return data;
   }
 
   getSingleBlock(block, begin, end) {
@@ -2029,7 +2051,7 @@ class StorageCache {
     const { place, } = this;
     const differentSections = getDifferenceSection(range, scope);
     differentSections.forEach((section) => {
-      const section = [left, right];
+      const [left, right] = section;
       let occupy;
       if (typeof block === 'string') {
         occupy = getStringOccupy(getSectionLength(section));
