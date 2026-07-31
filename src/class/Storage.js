@@ -1384,7 +1384,10 @@ class Storage {
 
   async addCountToCounts(countsPath, code, frequency) {
     const { shiftTwoBytes, } = this;
-    const words = [shiftTwoBytes.fromInt(code), 0, shiftTwoBytes.fromInt(frequency), 1, 3, 1, 0];
+    const words = [
+      shiftTwoBytes.fromInt(code), 0,
+      shiftTwoBytes.fromInt(frequency), 1, 3, 1, 0
+    ];
     if (await existsPromise(countsPath)) {
       const fd = await openPromise(countsPath, 'a');
       await writePromise(fd, Buffer.from(words.flat()));
@@ -1400,7 +1403,10 @@ class Storage {
 
   async addPointerToPointers(pointersPath, code, frequency) {
     const { shiftTwoBytes, } = this;
-    const words = [shiftTwoBytes.fromInt(code), 0, shiftTwoBytes.fromInt(frequency), 0];
+    const words = [
+      shiftTwoBytes.fromInt(code), 0,
+      shiftTwoBytes.fromInt(frequency), 0
+    ];
     if (await existsPromise(pointersPath)) {
       const fd = await openPromise(pointersPath, 'a');
       await writePromise(fd, Buffer.from(words.flat()));
@@ -1457,10 +1463,18 @@ class Storage {
               update = true;
               break;
             } else {
-              words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count + 1n), 1]);
+              words = words.concat([
+                shiftTwoBytes.fromInt(code1), 0,
+                shiftTwoBytes.fromInt(frequency1), 1,
+                shiftTwoBytes.fromInt(count + 1n), 1
+              ]);
             }
           } else {
-            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1]);
+            words = words.concat([
+              shiftTwoBytes.fromInt(code1), 0,
+              shiftTwoBytes.fromInt(frequency1), 1,
+              shiftTwoBytes.fromInt(count), 1
+            ]);
           }
           status = 3;
         }
@@ -1560,7 +1574,10 @@ class Storage {
               reduce = true;
             }
           } else {
-            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 0])
+            words = words.concat([
+              shiftTwoBytes.fromInt(code1), 0,
+              shiftTwoBytes.fromInt(frequency1), 0
+            ]);
           }
           status = 0;
         }
@@ -1677,11 +1694,19 @@ class Storage {
                 update = true;
                 break;
               } else {
-                words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count - 1n), 1, 0]);
+                words = words.concat([
+                  shiftTwoBytes.fromInt(code1), 0,
+                  shiftTwoBytes.fromInt(frequency1), 1,
+                  shiftTwoBytes.fromInt(count - 1n), 1, 0
+                ]);
               }
             }
           } else {
-            words = words.concat([shiftTwoBytes.fromInt(code1), 0, shiftTwoBytes.fromInt(frequency1), 1, shiftTwoBytes.fromInt(count), 1, 0]);
+            words = words.concat([
+              shiftTwoBytes.fromInt(code1), 0,
+              shiftTwoBytes.fromInt(frequency1), 1,
+              shiftTwoBytes.fromInt(count), 1, 0
+            ]);
           }
           bytes = [];
           status = 3;
