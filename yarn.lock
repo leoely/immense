@@ -4604,6 +4604,15 @@ manner.js@^1.1.4:
     gulp "^4.0.2"
     node-fetch "2"
 
+manner.js@^1.2.7:
+  version "1.2.7"
+  resolved "https://registry.yarnpkg.com/manner.js/-/manner.js-1.2.7.tgz#e21af8d04ed86c5ff7981c45e364ea32f7aadbe1"
+  integrity sha512-1ua6gWt4AvgmMGT6debx2Dr4nrpysU/5U6XqEYuq98DidcMDmh8XrXgeD584/l5ab4inR2a2s6hn1UvYiMsX/w==
+  dependencies:
+    babel-plugin-root-import "^6.6.0"
+    gulp "^4.0.2"
+    node-fetch "2"
+
 map-cache@^0.2.0, map-cache@^0.2.2:
   version "0.2.2"
   resolved "https://registry.yarnpkg.com/map-cache/-/map-cache-0.2.2.tgz#c32abd0bd6525d9b051645bb4f26ac5dc98a0dbf"

@@ -3,6 +3,7 @@ import {
   ByteArray,
   getGTMNowString,
   getOwnIpAddresses,
+  getAddress,
   appendToLog,
 } from 'manner.js/server';
 import Storage from '~/class/Storage';
@@ -190,8 +191,8 @@ class DistribStorage extends Storage {
     const locations = [];
     ipAddresses.forEach((ipAddress) => {
       const { ipv4, ipv6, } = ipAddress;
-      locations.push(ipv4 + ':' + port);
-      locations.push('[' + ipv6 + ']:' + port);
+      locations.push(getAddress(ipv4, port));
+      locations.push(getAddress(ipv6, port));
     });
     const hash = {};
     const storages = allStorages.filter((storage) => {
@@ -205,22 +206,11 @@ class DistribStorage extends Storage {
       for (let i = 0; i< locations.length ; i += 1) {
         const location = locations[i];
         const [ip] = storage;
-        if (net.isIPv4(ip)) {
-          if (storage.join(':') === location) {
-            const [ip] = storage;
-            this.ip = ip;
-            flag = false;
-            break;
-          }
-        } else if (net.isIPv6(ip)) {
-          const [ip, port] = storage;
-          const formatStorage = ['[' + ip + ']', port];
-          if (formatStorage.join(':') === location) {
-            const [ip] = storage;
-            this.ip = ip;
-            flag = false;
-            break;
-          }
+        if (getAddress(ip, port) === location) {
+          const [ip] = storage;
+          this.ip = ip;
+          flag = false;
+          break;
         }
       }
       return flag;

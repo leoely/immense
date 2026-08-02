@@ -37,65 +37,199 @@ function getBinBuf(params) {
 }
 
 class DistribStorageCache extends StorageCache {
-  constructor(options, port, allRouters) {
-    super(options);
-    this.dealParams(port, allRouters);
-    this.outputDistribTopology();
+  constructor(tb, options, port, allTables) {
+    super(tb, options);
+    this.global = null;
+    this.dealParams(port, allTables);
+  }
+
+  setGlobal() {
+    const {
+      constructor: {
+        name,
+      },
+    } = this;
+    switch (name) {
+      case 'DistribTable':
+        this.global = global;
+        break;
+      default:
+        throw new Error('[Error] Only distributed instances can set global object.');
+    }
     this.checkMemory();
   }
 
-  static async combine(distribRouters) {
-    if (!Array.isArray(distribRouters)) {
-      throw new Error('[Error] The parameter distribRouters should be of array type.');
+  static async combine(distribTables) {
+    if (!Array.isArray(distribTables)) {
+      throw new Error('[Error] The parameter distribTables should be of array type.');
     }
-    const serverPromises = distribRouters.map((distribRouter) => {
-      return distribRouter.setUpServer();
+    const serverPromises = distribTables.map((distribTable) => {
+      return distribTable.setUpServer();
     });
-    const clientsPromises = distribRouters.map((distribRouter) => {
-      return distribRouter.setUpClients();
+    const clientsPromises = distribTables.map((distribTable) => {
+      return distribTable.setUpClients();
     });
     await Promise.all(serverPromises.concat(clientsPromises));
   }
 
-  static async join(newDistribRouters, originDistribRouters) {
-    if (!Array.isArray(newDistribRouters)) {
-      throw new Error('[Error] The new distributed routings should beo fo array type..');
+  static async join(newDistribTables, originDistribTables) {
+    if (!Array.isArray(newDistribTables)) {
+      throw new Error('[Error] The new distributed tables should beo fo array type..');
     }
-    if (!Array.isArray(originDistribRouters)) {
-      throw new Error('[Error] The origin distributed routings should be of array type.');
+    if (!Array.isArray(originDistribTables)) {
+      throw new Error('[Error] The origin distributed tables should be of array type.');
     }
-    const serverPromises = newDistribRouters.map((distribRouter) => {
-      return distribRouter.setUpServer();
+    const serverPromises = newDistribTables.map((distribTable) => {
+      return distribTable.setUpServer();
     });
-    const clientsPromises = newDistribRouters.map((distribRouter) => {
-      return distribRouter.setUpClients();
+    const clientsPromises = newDistribTables.map((distribTable) => {
+      return distribTable.setUpClients();
     });
-    const addPromises = originDistribRouters.map((originDistribRouter) => {
-      return newDistribRouters.map((newDistribRouter) => {
-        const { ip, port, } = newDistribRouter;
-        originDistribRouter.addRouter(ip, port);
+    const addPromises = originDistribTables.map((originDistribTable) => {
+      return newDistribTables.map((newDistribTable) => {
+        const { ip, port, } = newDistribTable;
+        originDistribTable.addTable(ip, port);
       });
     }).flat();
     await Promise.all(serverPromises.concat(clientsPromises).concat(addPromises));
   }
 
-  static async release(distribRouters) {
-    if (!Array.isArray(distribRouters)) {
-      throw new Error('[Error] The parameter distribRouters should be of array type.');
+  static async release(distribTables) {
+    if (!Array.isArray(distribTables)) {
+      throw new Error('[Error] The parameter distribTables should be of array type.');
     }
-    distribRouters.forEach((distribRouter) => {
-      distribRouter.closeClients();
-      delete distribRouter.clients;
+    distribTables.forEach((distribTable) => {
+      distribTable.closeClients();
+      delete distribTable.clients;
     });
-    for (let i = 0; i < distribRouters.length; i += 1) {
-      const distribRouter = distribRouters[i];
-      await distribRouter.closeServer();
-      delete distribRouter.server;
+    for (let i = 0; i < distribTables.length; i += 1) {
+      const distribTable = distribTables[i];
+      await distribTable.closeServer();
+      delete distribTable.server;
     }
-    distribRouters.forEach((distribRouter) => {
-      distribRouter.closeConnections();
-      delete distribRouter.connections;
+    distribTables.forEach((distribTable) => {
+      distribTable.closeConnections();
+      delete distribTable.connections;
     });
+  }
+
+  setGlobal(global) {
+    this.global = global;
+  }
+
+  dealParams(port, allTables) {
+    if (!Number.isInteger(port)) {
+      throw new Error('[Error] Parameter id needs to be an integer.');
+    }
+    if (!(port >= 0)) {
+      throw new Error('[Error] Parameter id needs to be a postive integer.');
+    }
+    this.port = port;
+    if (!Array.isArray(allTables)) {
+      throw new Error('[Error] Parameter allTables needs to be of array type.');
+    }
+    const ipAddresses = getOwnIpAddresses();
+    const locations = [];
+    ipAddresses.forEach((ipAddress) => {
+      const { ipv4, ipv6, } = ipAddress;
+      locations.push(getAddress(ipv4, port));
+      locations.push(getAddress(ipv6, port));
+    });
+    const hash = {};
+    const tables = allTables.filter((table) => {
+      const [_, port] = table;
+      if (hash[port] === undefined) {
+        hash[port] = true;
+      } else {
+        throw new Error('[Error] A port can only be bound to one table');
+      }
+      let flag = true;
+      for (let i = 0; i< locations.length ; i += 1) {
+        const location = locations[i];
+        const [ip] = table;
+        if (getAddress(ip, port)) {
+          const [ip] = table;
+          this.ip = ip;
+          flag = false;
+          break;
+        }
+      }
+      return flag;
+    });
+    this.tables = allTables;
+  }
+
+  getTables() {
+    const { tables, } = this;
+    if (!Array.isArray(tables)) {
+      throw new Error('[Error] The status of the tables is abnormal.');
+    }
+    return tables;
+  }
+
+  outputDistribOperate(operate) {
+    if (typeof operate !== 'string') {
+      throw new Error('[Error] The parameter operate must be of string type.');
+    }
+    const {
+      tb,
+      options: {
+        debug,
+      },
+      constructor: {
+        name,
+      },
+    } = this;
+    operate = operate.split(' ').map((word) => {
+      return word[0].toUpperCase() + word.substring(1, word.length);
+    }).join(' ');
+    const tables = this.getTables();
+    if (debug === true) {
+      const {
+        fulmination,
+      } = this;
+      fulmination.scan(`
+        (+) bold: "&"& (+) bold: * Class "[ (+) black; bgWhite: ` + name + `(+) bold: "] Operate "[ (+) black; bgWhite: ` + operate + `(+) bold: "] Successfully executed and completed. 2&
+        (+) bold: "[ (+) black; bgWhite: Topology (+) bold: "] ++ * (+) underline: "b` + formatTables(tables) + `" &
+        (+) bold: "[ (+) black; bgWhite: Date (+) bold: "] @@ * (+) underline: "b` + getGTMNowString() + `" 2&
+      `);
+    }
+    this.appendToLog('Class:(' + name + ') ████ & ████ ' + 'Operate:(' + operate + ') ████ & ████ ' + 'Topology:' + formatTables(tables));
+  }
+
+  outputDistribOperateError(operate, error) {
+    if (typeof operate !== 'string') {
+      throw new Error('[Error] The parameter operate must be of string type.');
+    }
+    if (!(error instanceof Error)) {
+      throw new Error('[Error] Parameter error should be of error type.');
+    }
+    const {
+      tb,
+      options: {
+        debug,
+      },
+      constructor: {
+        name,
+      },
+    } = this;
+    operate = operate.split(' ').map((word) => {
+      return word[0].toUpperCase() + word.substring(1, word.length);
+    }).join(' ');
+    const tables = this.getTables();
+    if (debug === true) {
+      const {
+        fulmination,
+      } = this;
+      fulmination.scan(`
+        (+) red; bold: !! (+) bold: * Class "[ (+) black; bgRed: ` + name + `(+) bold: "] Operate "[ (+) black; bgRed: ` + operate + `(+) bold: "] An error occurred during execution. 2&
+        (+) bold: "[ (+) black; bgRed: Topology (+) bold: "] ++ * (+) underline: "b` + formatTables(tables) + `" &
+        (+) bold: "[ (+) black; bgRed: Date (+) bold: "] @@ * (+) underline: "b` + getGTMNowString() + `" 2&
+      `);
+    }
+    this.appendToLog('Class:(' + name + ') ████ & ████ ' + 'Operate:(' + operate + ') ████ & ████ ' + 'Topology:' + formatTables(tables));
+    this.addToLog(error.stack + '\n');
+    throw error;
   }
 
   getAckPromises(callback) {
@@ -117,195 +251,6 @@ class DistribStorageCache extends StorageCache {
     });
   }
 
-  dealParams(port, allRouters) {
-    if (Number.isInteger(port) !== true) {
-      throw new Error('[Error] The parameter port should be of integer type.');
-    }
-    if (!(port >= 0)) {
-      throw new Error('[Error] Parameter id needs to be a postive integer.');
-    }
-    this.port = port
-    if (Array.isArray(allRouters) !== true) {
-      throw new Error('[Error] The parameter all routers should be array type.');
-    }
-    const ipAddresses = getOwnIpAddresses();
-    const locations = [];
-    ipAddresses.forEach((ipAddress) => {
-      const { ipv4, ipv6, } = ipAddress;
-      locations.push(ipv4 + ':' + port);
-      locations.push('[' + ipv6 + ']:' + port);
-    });
-    const hash = {};
-    const routers = allRouters.filter((router) => {
-      const [_, port] = router;
-      if (hash[port] === undefined) {
-        hash[port] = true;
-      } else {
-        throw new Error('[Error] A port can only be bound to one router');
-      }
-      let flag = true;
-      for (let i = 0; i< locations.length ; i += 1) {
-        const location = locations[i];
-        const [ip] = router;
-        if (net.isIPv4(ip)) {
-          if (router.join(':') === location) {
-            const [ip] = router;
-            this.ip = ip;
-            flag = false;
-            break;
-          }
-        } else if (net.isIPv6(ip)) {
-          const [ip, port] = router;
-          const formatStorage = ['[' + ip + ']', port];
-          if (formatStorage.join(':') === location) {
-            const [ip] = router;
-            this.ip = ip;
-            flag = false;
-            break;
-          }
-        }
-      }
-      return flag;
-    });
-    this.routers = routers;
-  }
-
-  outputDistribTopology() {
-    const {
-      options: {
-        debug,
-        logLevel,
-      },
-      fulmination,
-    } = this;
-    if (logLevel !== 0) {
-      const routers = this.getRouters()
-      if (routers.length > 0) {
-        const routerTopologys = '[' + routers.join(', ') + ']';
-        const { ip, port, } = this;
-        this.appendToLog(
-          ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port + ' ████ & ████ TOPOLOGY:' + routerTopologys + ' ████ ||\n',
-        );
-      }
-    }
-    if (debug === true) {
-      const routers = this.getRouters();
-      if (Array.isArray(routers) && routers.length > 0) {
-        const routerFulminations = routers.map((router) => {
-          return '(+) bold; dim: "b' + router + '" (+): * | (+): *';
-        }).join(' ').concat(' &');
-        fulmination.scanAll([
-          [`
-            (+) blue; bold: * "&"& (+) bold: * DistribRouter (+) bold; dim: * show distributed topology. &
-            (+) blue; bold: ** └─ (+) : * | (+) : *
-            `, 0],
-          [routerFulminations, 0],
-        ]);
-        console.log(getGTMNowString() + '\n');
-      }
-    }
-  }
-
-  outputDistribOperate(operate, location) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      this.appendToLog(
-        ' || ████ Location:' + location + ' ████ & ████ OPERATE:' + operate + ' ████ ||\n',
-      );
-    }
-    if (debug === true) {
-      this.debugDetail(`
-        (+) bold; blue: * "&"& (+) green; bold: * Location (+) bold; dim: * ` + location + `. &
-        (+) bold; blue: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-      `);
-    }
-  }
-
-  outputDistribOperateError(operate, locations, error) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      locations.forEach((location) => {
-        this.appendToLog(
-          ' || ████ Location:' + location + ' ████ & ████ OPERATE:' + operate + ' ████ ||\n',
-        );
-      });
-      this.addToLog(error.stack + '\n');
-    }
-    if (debug === true) {
-      locations.forEach((location) => {
-        this.debugDetail(`
-          (+) bold; red: * !! (+) green; bold: * Location (+) bold; dim: * ` + location + `. &
-          (+) bold; red: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-        `);
-      })
-    }
-    throw error;
-  }
-
-  outputDistribFunction(operate) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      const { ip, port, } = this;
-      this.appendToLog(
-        ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port +  ' ████ & ████ OPEARATE:' + operate + ' ████ ||\n',
-      );
-    }
-    if (debug === true) {
-      const { ip, port, } = this;
-      this.debugDetail(`
-        (+) bold; blue: * "&"& (+) green; bold: * Ip (+) bold; dim: * ` + ip + ` (+) green; bold: * Port (+) bold; dim: * ` + port + ` . &
-        (+) bold; blue: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-      `);
-    }
-  }
-
-  outputDistribFunctionError(operate, error) {
-    const {
-      options: {
-        logLevel,
-        debug,
-      },
-    } = this;
-    if (logLevel !== 0) {
-      const { ip, port, } = this;
-      this.appendToLog(
-        ' || ████ Ip:' + ip + ' ████ & ████ Port:' + port +  ' ████ & ████ OPEARATE:' + operate + ' ████ ||\n',
-      );
-      this.addToLog(error.stack);
-    }
-    if (debug === true) {
-      const { ip, port, } = this;
-      this.debugDetail(`
-        (+) bold; red: * !! (+) green; bold: * Ip (+) bold; dim: * ` + ip + ` (+) green; bold: * Port (+) bold; dim: * ` + port + ` . &
-        (+) bold; red: ** └─ (+): * | (+) bold: * operate (+) dim: : * ` + operate + `(+): * | &
-      `);
-    }
-    throw error;
-  }
-
-  getRouters() {
-    const { routers, } = this;
-    if (!Array.isArray(routers)) {
-      throw new Error('[Error] The status of routers in distributed routing.');
-    }
-    return routers;
-  }
-
   async closeServer() {
     try {
       await new Promise((resolve, reject) => {
@@ -313,9 +258,9 @@ class DistribStorageCache extends StorageCache {
           resolve();
         });
       })
-      this.outputDistribFunction('close server');
+      this.outputDistribOperate('close server');
     } catch (error) {
-      this.outputDistribFunctionError('close server', error);
+      this.outputDistribOperateError('close server', error);
     }
   }
 
@@ -324,9 +269,9 @@ class DistribStorageCache extends StorageCache {
       this.getClients().forEach((client) => {
         client.destroySoon();
       });
-      this.outputDistribFunction('close client');
+      this.outputDistribOperate('close client');
     } catch (error) {
-      this.outputDistribFunctionError('close client', error);
+      this.outputDistribOperateError('close server', error);
     }
   }
 
@@ -342,9 +287,9 @@ class DistribStorageCache extends StorageCache {
       connections.forEach((connection) => {
         connection.destroySoon();
       });
-      this.outputDistribFunction('close connection');
+      this.outputDistribOperate('close connection');
     } catch (error) {
-      this.outputDistribFunctionError('close connection', error);
+      this.outputDistribOperateError('close connection', error);
     }
   }
 
@@ -375,7 +320,7 @@ class DistribStorageCache extends StorageCache {
   async setUpServer() {
     try {
       const {
-        routers: {
+        tables: {
           length,
         },
       } = this;
@@ -399,19 +344,18 @@ class DistribStorageCache extends StorageCache {
         server.listen(port);
       });
       const { server, } = this;
-      this.outputDistribFunction('setup client');
       this.checkMemory();
-      return server;
+      this.outputDistribOperate('setUp server');
     } catch (error) {
-      this.outputDistribFunctionError('setup client', error);
+      this.outputDistribOperateError('setUp server', error);
     }
   }
 
   async setUpClients() {
     try {
-      const { routers, } = this;
-      const clientPromises = routers.map((router) => {
-        const [ip, port] = router;
+      const { tables, } = this;
+      const clientPromises = tables.map((table) => {
+        const [ip, port] = table;
         return new Promise((resolve, reject) => {
           const client = net.createConnection(port, ip, () => {
             client.ip = ip;
@@ -420,17 +364,16 @@ class DistribStorageCache extends StorageCache {
           });
           client.on('close', () => {
             const { ip, port, } = client;
-            this.removeRouter(ip, port);
+            this.removeTable(ip, port);
           });
         });
       });
       this.clients = await Promise.all(clientPromises);
-      const { clients, } = this;
-      this.outputDistribFunction('setup client');
+      const { client, } = this;
       this.checkMemory();
-      return clients;
+      this.outputDistribOperate('setUp client');
     } catch (error) {
-      this.outputDistribFunctionError('setup client');
+      this.outputDistribOperateError('setUp client', error);
     }
   }
 
@@ -443,173 +386,123 @@ class DistribStorageCache extends StorageCache {
         s = i + 1;
       }
     }
-    const bigInt1 = nonZeroByteArray.toInt(segments.shift());
+    const bigInt1 = nonZeroByteArray.toInt(segments.shift())
     const code = Number(bigInt1);
     let params;
     switch (code) {
-      case 0:
       case 4:
-      case 5:
         params = segments.map((segment, index) => {
           switch (index) {
             case 0:
-              return nonZeroByteArray.toInt(segment);
-            default:
               return segment.toString();
+            case 1:
+              return new Function('return ' + segment.toString())();
           }
         });
         break;
-      case 1:
-      case 2:
-      case 3:
-        params = segments.map((segment, index) => {
-          return segment.toString();
+      default:
+        params = segments.map((segment) => {
+          return nonZeroByteArray.toInt(segment);
         });
-        break;
     }
     switch (code) {
       case 0: {
-        const [bigInt2, ...rests] = params;
-        const type = Number(bigInt2);
-        switch (type) {
-          case 0: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.attach(location, JSON.parse(content));
-            connection.write('ack');
-            break;
-          }
-          case 1: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.attach(location, new Function(content));
-            connection.write('ack');
-            break;
-          }
-          default:
-            throw new Error('[Error] Type values should be in the range [0, 1].');
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameters length should be equal to two.');
         }
+        const [id, total] = params;
+        this.deleteExchange(Number(id), Number(total), true);
+        connection.write('ack');
         break;
       }
       case 1: {
-        if (params.length !== 2) {
-          throw new Error('[Error] The parameter lengths do not match convertion.');
+        if (params.length !== 1) {
+          throw new Error('[Error] The parameter length should be equal to one.');
         }
-        const [location1, location2] = params;
-        this.exchange(location1, location2);
+        const [id] = params;
+        this.deleteDataById(Number(id));
+        this.outOfOrder = true;
+        this.full = false;
         connection.write('ack');
         break;
       }
       case 2: {
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameters length should be equal to two.');
+        }
+        const [id1, id2] = params;
+        this.deleteDataById(Number(id1));
+        this.deleteDataById(Number(id2));
+        this.outOfOrder = true;
+        this.full = false;
+        connection.write('ack');
+        break;
+      }
+      case 3: {
         if (params.length !== 1) {
-          throw new Error('[Error] The parameters lengths do not match convertion.');
+          throw new Error('[Error] The parameter length should be equal to one.');
         }
-        const [location] = params;
-        this.ruin(location);
+        const [highId] = params;
+        const mapping = this.exchangeHighIndex(Number(highId), true);
         connection.write('ack');
-        break;
+        return mapping;
       }
-      case 3:
-        this.ruinAll(params);
-        connection.write('ack');
-        break;
       case 4: {
-        const [bigInt2, ...rests] = params;
-        const type = Number(bigInt2);
-        switch (type) {
-          case 0: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.replace(location, JSON.parse(content));
-            connection.write('ack');
-            break;
-          }
-          case 1: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.replace(location, new Function(content));
-            connection.write('ack');
-            break;
-          }
-          default:
-            throw new Error('[Error] Type values should be in the range [0, 1].');
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameters length should be equal to two.');
         }
-        break;
-      }
-      case 5: {
-        const [bigInt2, ...rests] = params;
-        const type = Number(bigInt2);
-        switch (type) {
-          case 0: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.revise(location, JSON.parse(content));
-            connection.write('ack');
-            break;
-          }
-          case 1: {
-            if (rests.length !== 2) {
-              throw new Error('[Error] The remaining parameter lengths do not match convertion.');
-            }
-            const [location, content] = rests;
-            this.revise(location, new Function(content));
-            connection.write('ack');
-            break;
-          }
-          default:
-            throw new Error('[Error] Type values should be in the range [0, 1].');
-        }
+        const [phrase, callback] = params;
+        this.addSystemNotice(phrase, callback);
+        connection.write('ack');
         break;
       }
       default:
-        throw new Error('[Error] The code value should be in the range [0, 5]');
+        throw new Error('[Error] The code value should be in the range [0, 4]');
     }
   }
 
-  removeRouter(ip, port) {
-    const { routers, } = this;
-    for (let i = 0; i < routers.length; i += 1) {
-      const [routerIp, routerPort] = routers[i];
-      if (routerIp === ip && routerPort === port) {
-        routers.splice(i, 1);
-        const { clients, } = this;
-        if (Array.isArray(clients)) {
-          clients.splice(i, 1);
-          clients[i].destroySoon();
+  removeTable(ip, port) {
+    try {
+      const { tables, } = this;
+      for (let i = 0; i < tables.length; i += 1) {
+        const [tableIp, tablePort] = tables[i];
+        if (tableIp === ip && tablePort === port) {
+          tables.splice(i, 1);
+          const { clients, } = this;
+          if (Array.isArray(clients)) {
+            clients.splice(i, 1);
+            clients[i].destroySoon();
+          }
+          break;
         }
-        break;
       }
+      this.outputDistribOperate('remove table');
+    } catch (error) {
+      this.outputDistribOperateError('remove table', error);
     }
-    this.outputDistribTopology();
   }
 
-  async addRouter(ip, port) {
-    return new Promise((resolve, reject) => {
-      const client = net.createConnection(port, ip, () => {
-        client.ip = ip;
-        client.port = port;
-        resolve(client);
+  async addTable(ip, port) {
+    try {
+      await new Promise((resolve, reject) => {
+        const client = net.createConnection(port, ip, () => {
+          client.ip = ip;
+          client.port = port;
+          resolve(client);
+        });
+        client.on('close', () => {
+          const { ip, port, } = client;
+          this.removeTable(ip, port);
+        });
+        const { tables, clients, } = this;
+        tables.push([ip, port]);
+        clients.push(client);
       });
-      client.on('close', () => {
-        const { ip, port, } = client;
-        this.removeRouter(ip, port);
-      });
-      const { routers, clients, } = this;
-      routers.push([ip, port]);
-      clients.push(client);
-    });
-    this.checkMemory();
-    this.outputDistribTopology();
+      this.checkMemory();
+      this.outputDistribOperate('remove table');
+    } catch (error) {
+      this.outputDistribOperateError('remove table', error);
+    }
   }
 
   checkCombine() {
@@ -619,120 +512,106 @@ class DistribStorageCache extends StorageCache {
     }
   }
 
-  async attachDistrib(location, content) {
+  async insertDistrib(cnt) {
     try {
       this.checkCombine();
-      this.attach(location, content);
-      switch (typeof content) {
-        case 'function': {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([0, 1, location, content.toString()]));
-          });
-          await Promise.all(ackPromises);
-          break;
-        }
-        default: {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([0, 0, location, JSON.stringify(content)]));
-          });
-          await Promise.all(ackPromises);
-        }
-      }
-      this.outputDistribOperate('attachDistrib', location);
+      await this.insert(cnt);
+      this.outputDistribOperate('insert distrib');
     } catch (error) {
-      this.outputDistribOperateError('attachDistrib', [locaiton]);
+      this.outputDistribOperateError('insert distrib', error);
     }
   }
 
-  async exchangeDistrib(location1, location2) {
+  async deleteExchangeDistrib(id, total) {
     try {
       this.checkCombine();
-      this.exchange(location1, location2);
+      await this.deleteExchange(id, total);
       const ackPromises = this.getAckPromises((client) => {
-        client.write(getBinBuf([1, location1, location2]));
+        client.write(getBinBuf([0, id, total]));
       });
       await Promise.all(ackPromises);
-      this.outputDistribOperate('exchangeDistrib', location1);
-      this.outputDistribOperate('exchangeDistrib', location2);
+      this.outputDistribOperate('deleteExchange distrib');
     } catch (error) {
-      this.outputDistribOperateError('exchangeDistrib', [locaiton1, location2]);
+      this.outputDistribOperateError('deleteExchange distrib', error);
     }
   }
 
-  async ruinDistrib(location) {
+  async deleteAllDistrib(ids) {
+    for (let i = 0; i < ids.length; i += 1) {
+      const id = ids[i];
+      await deleteDistrib(id);
+    }
+    this.outputDistribOperate('deleteAll distrib');
+  }
+
+  async deleteDistrib(id) {
     try {
       this.checkCombine();
-      this.ruin(location);
+      await this.delete(id);
       const ackPromises = this.getAckPromises((client) => {
-        client.write(getBinBuf([2, location]));
+        client.write(getBinBuf([1, id]));
       });
       await Promise.all(ackPromises);
-      this.outputDistribOperate('ruinDistrib', location);
+      this.outputDistribOperate('delete distrib');
     } catch (error) {
-      this.outputDistribOperateError('ruinDistrib', [location]);
+      this.outputDistribOperateError('delete distrib', error);
     }
   }
 
-  async ruinAllDistrib(locations) {
-    this.checkCombine();
-    this.ruinAll(locations);
-    const ackPromises = this.getAckPromises((client) => {
-      client.write(getBinBuf([3, ...locations]));
-    });
-    await Promise.all(ackPromises);
-  }
-
-  async replaceDistrib(location, multiple) {
+  async updateDistrib(obj) {
     try {
-      if (multiple instanceof Thing) {
-        throw new Error('[Error] Distributed operations are not easy to transmit');
-      }
-      const content = multiple;
       this.checkCombine();
-      this.replace(location, content);
-      switch (typeof content) {
-        case 'function': {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([4, 1, location, content.toString()]));
-          });
-          await Promise.all(ackPromises);
-          break;
-        }
-        default: {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([4, 0, location, JSON.stringify(content)]));
-          });
-          await Promise.all(ackPromises);
-        }
-      }
-      this.outputDistribOperate('replaceDistrib', location);
+      await this.update(obj);
+      const ackPromises = this.getAckPromises((client) => {
+        client.write(getBinBuf([1, obj.id]));
+      });
+      await Promise.all(ackPromises);
+      this.outputDistribOperate('update distrib');
     } catch (error) {
-      this.outputDistribOperateError('replaceDistrib', [location]);
+      this.outputDistribOperateError('update distrib', error);
     }
   }
 
-  async reviseDistrib(location, content) {
+  async exchangeContentDistrib(id1, id2) {
     try {
       this.checkCombine();
-      this.revise(location, content);
-      switch (typeof content) {
-        case 'function': {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([5, 1, location, content.toString()]));
-          });
-          await Promise.all(ackPromises);
-          break;
-        }
-        default: {
-          const ackPromises = this.getAckPromises((client) => {
-            client.write(getBinBuf([5, 0, location, JSON.stringify(content)]));
-          });
-          await Promise.all(ackPromises);
-        }
-      }
-      this.outputDistribOperate('reviseDistrib', location);
+      await this.exchangeContent(id1, id2);
+      const ackPromises = this.getAckPromises((client) => {
+        client.write(getBinBuf([2, id1, id2]));
+      });
+      await Promise.all(ackPromises);
+      this.outputDistribOperate('exchangeContent distrib');
     } catch (error) {
-      this.outputDistribOperateError('reviseDistrib', [location]);
+      this.outputDistribOperateError('exchangeContent distrib', error);
+    }
+  }
+
+  async exchangeHighIndexDistrib(highId) {
+    try {
+      this.checkCombine();
+      const mapping = await this.exchangeHighIndex(highId);
+      const ackPromises = this.getAckPromises((client) => {
+        client.write(getBinBuf([3, highId]));
+      });
+      await Promise.all(ackPromises);
+      this.outputDistribOperate('exchangeHighIndex distrib');
+      return mapping;
+    } catch (error) {
+      this.outputDistribOperateError('exchangeHighIndex distrib');
+    }
+  }
+
+  async addSystemNoticeDistrib(phrase, callback) {
+    try {
+      this.checkCombine();
+      this.addSystemNotice(phrase, callback);
+      const ackPromises = this.getAckPromises((client) => {
+        client.write(getBinBuf([4, phrase, callback.toString()]));
+      });
+      await Promise.all(ackPromises);
+      this.outputDistribOperate('addSystemNotice distrib');
+    } catch (error) {
+      this.outputDistribOperateError('addSystemNotice distrib', error);
     }
   }
 }

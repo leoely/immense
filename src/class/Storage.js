@@ -1223,6 +1223,8 @@ class Storage {
       } = this;
       options.acquireAvailableDelta = true;
       this[temporaryDiskAvailableKey] = temporaryDiskAvailable;
+    } else {
+      options.acquireAvailableDelta = false;
     }
   }
 
