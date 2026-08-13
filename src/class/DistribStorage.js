@@ -1,3 +1,4 @@
+import EventEmitter from 'events';
 import net from 'net';
 import {
   ByteArray,
@@ -9,19 +10,37 @@ import {
 import Storage from '~/class/Storage';
 import ParameterError from '~/class/ParameterError';
 
+function addDataFlag(flag, data) {
+  if (!Number.isInteger(flag)) {
+    throw new Error('[Error] The parameter flag should be an integer type');
+  }
+  if (!Buffer.isBuffer(data) && typeof data !== 'string') {
+    throw new Error('[Error] The parameter buffer should be a buffer or string type.');
+  }
+  const fbytes = Buffer.from([flag]);
+  if (Buffer.isBuffer(data)) {
+    return Buffer.concat([fbytes, data]);
+  } else {
+    return Buffer.concat([fbytes, Buffer.from(data)]);
+  }
+}
+
 class DistribStorage extends Storage {
   constructor(location, options, port, allStorages) {
     super(location, options);
     this.dealParams(port, allStorages);
-    this.request = null;
     this.count = 0;
     this.size = -1;
     this.state = 0;
     this.status = 0;
     this.params = [];
+    this.count = 0;
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
-    this.dealBuffer = this.dealBuffer.bind(this);
+    this.eventEmitter = new EventEmitter();
+    this.dealRequestBuffer = this.dealRequestBuffer.bind(this);
+    this.dealReceiveBuffer = this.dealReceiveBuffer.bind(this);
+    this.dealReceiveAndSendBuffer = this.dealReceiveAndSendBuffer.bind(this);
   }
 
   static async combine(distribStorages) {
@@ -35,28 +54,20 @@ class DistribStorage extends Storage {
       return distribStorage.setUpClients();
     });
     await Promise.all(serverPromises.concat(clientsPromises));
+    distribStorages.forEach((distribStorage) => {
+      distribStorage.setUpSockets(true);
+    });
   }
 
-  static async join(newDistribStorages, originDistribStorages) {
-    if (!Array.isArray(newDistribStorages)) {
-      throw new Error('[Error] The new distributed routings should beo fo array type..');
-    }
-    if (!Array.isArray(originDistribStorages)) {
-      throw new Error('[Error] The origin distributed routings should be of array type.');
-    }
-    const serverPromises = newDistribStorages.map((distribStorage) => {
-      return distribStorage.setUpServer();
+  static async join(newDistribStorages, originDistribStorages, allStorages) {
+    originDistribStorages.forEach((originDistribStorage) => {
+      originDistribStorage.setAllStorages(allStorages);
     });
-    const clientsPromises = newDistribStorages.map((distribStorage) => {
-      return distribStorage.setUpClients();
+    distribStorages = originDistribStorages.concat(newDistribStorages);
+    distribStorages.forEach((distribStorage, index) => {
+      distribStoragee.index = index;
     });
-    const addPromises = originDistribStorages.map((originDistribStorage) => {
-      return newDistribStorages.map((newDistribStorage) => {
-        const { ip, port, } = newDistribStorage;
-        originDistribStorage.addStorage(ip, port);
-      });
-    }).flat();
-    await Promise.all(serverPromises.concat(clientsPromises).concat(addPromises));
+    await DistribStorage.combine(newDistribStorages);
   }
 
   static async release(distribStorages) {
@@ -121,10 +132,11 @@ class DistribStorage extends Storage {
     if (typeof callback !== 'function') {
       throw new Error('[Error] Parameter callback should be a funciton type.');
     }
-    return this.getClients().map((client) => {
-      callback(client);
+    const { eventEmitter, } = this;
+    return this.getSockets().map((socket) => {
       return new Promise((resolve, reject) => {
-        client.on('data', (buf) => {
+        callback(socket);
+        eventEmitter.on('data:receive', (buf) => {
           const segments = [];
           let s = 0;
           for (let i = 0; i < buf.length; i += 1) {
@@ -176,6 +188,49 @@ class DistribStorage extends Storage {
     });
   }
 
+  setAllStorages(allStroages) {
+    if (Array.isArray(allStoragees) !== true) {
+      throw new Error('[Error] The parameter all Storages should be array type.');
+    }
+    const { port, } = this;
+    const ipAddresses = getOwnIpAddresses();
+    const locations = [];
+    ipAddresses.forEach((ipAddress) => {
+      const { ipv4, ipv6, } = ipAddress;
+      locations.push(getAddress(ipv4, port));
+      locations.push(getAddress(ipv6, port));
+    });
+    const hash = {};
+    allStorages = allStorages.map((storage, index) => {
+      const [ip, port] = storage;
+      return [ip, port, index];
+    });
+    const storages = allStorages.filter((storage, index) => {
+      const [_, port] = storage;
+      if (hash[port] === undefined) {
+        hash[port] = true;
+      } else {
+        throw new Error('[Error] A port can only be bound to one storage');
+      }
+      let flag = true;
+      for (let i = 0; i< locations.length ; i += 1) {
+        const location = locations[i];
+        const [ip] = storage;
+        if (getAddress(ip, port) === location) {
+          const [ip] = storage;
+          this.index = index;
+          this.ip = ip;
+          flag = false;
+          break;
+        }
+      }
+      return flag;
+    });
+    const { ip, } = this;
+    this.address = getAddress(ip, this.port);
+    this.storages = storages;
+  }
+
   dealParams(port, allStorages) {
     if (Number.isInteger(port) !== true) {
       throw new Error('[Error] The parameter port should be of integer type.');
@@ -195,12 +250,16 @@ class DistribStorage extends Storage {
       locations.push(getAddress(ipv6, port));
     });
     const hash = {};
-    const storages = allStorages.filter((storage) => {
+    allStorages = allStorages.map((storage, index) => {
+      const [ip, port] = storage;
+      return [ip, port, index];
+    });
+    const storages = allStorages.filter((storage, index) => {
       const [_, port] = storage;
       if (hash[port] === undefined) {
         hash[port] = true;
       } else {
-        throw new Error('[Error] A port can only be bound to one storage');
+        throw new Error('[Error] A port can only be bound to one storage.');
       }
       let flag = true;
       for (let i = 0; i< locations.length ; i += 1) {
@@ -208,6 +267,7 @@ class DistribStorage extends Storage {
         const [ip] = storage;
         if (getAddress(ip, port) === location) {
           const [ip] = storage;
+          this.index = index;
           this.ip = ip;
           flag = false;
           break;
@@ -215,6 +275,8 @@ class DistribStorage extends Storage {
       }
       return flag;
     });
+    const { ip, } = this;
+    this.address = getAddress(ip, this.port);
     this.storages = storages;
   }
 
@@ -252,9 +314,6 @@ class DistribStorage extends Storage {
       if (!Array.isArray(connections)) {
         throw new Error('[Error] The connections is not an array type or the combine is not complete.');
       }
-      if (connections.length === 0) {
-        throw new Error('[Error] The length of the connections is zero.Perhaps the combine was not completed;');
-      }
       connections.forEach((connection) => {
         connection.destroySoon();
       });
@@ -286,52 +345,31 @@ class DistribStorage extends Storage {
     return clients;
   }
 
-  async setUpServer() {
-    try {
-      const {
-        storages: {
-          length,
-        },
-      } = this;
-      this.connections = [];
-      this.server = await new Promise((resolve, reject) => {
-        const server = net.createServer((connection) => {
-          const { count, } = this;
-          if (count === length - 1) {
-            connection.on('data', async (buf) => {
-              await this.dealConnectionBuf(buf, connection);
-            });
-            this.connections.push(connection);
-            this.count += 1;
-            resolve(server);
-          } else if (count < length - 1) {
-            connection.on('data', async (buf) => {
-              await this.dealConnectionBuf(buf, connection);
-            });
-            this.connections.push(connection);
-            this.count += 1;
-          } else if (count >= length) {
-            const { request, } = this;
-            if (request === null) {
-              this.setRequest(connection);
-              this.count += 1;
-            } else {
-              connection.destroySoon();
-            }
-          }
-        });
-        const { port, } = this;
-        server.on('error', (error) => {
-          throw error;
-        });
-        server.listen(port);
-      });
-      this.server = net.createServer((connection) => {
-        this.request = connection;
-      });
-      const { server, } = this;
-      return server;
-    } catch (error) {
+  getSockets() {
+    this.checkCombine();
+    return this.sockets;
+  }
+
+  dealReceiveAndSendBuffer(buffer, socket) {
+    const flag = buffer[0];
+    const {
+      length,
+    } = buffer;
+    buffer = buffer.subarray(1, length);
+    switch (flag) {
+      case 0: {
+        const {
+          eventEmitter,
+        } = this;
+        eventEmitter.emit('data:receive', buffer);
+        break;
+      }
+      case 1:
+        this.dealReceiveBuffer(buffer, socket);
+        break;
+      case 2:
+        this.dealRequestBuffer(buffer, socket);
+        break;
     }
   }
 
@@ -357,7 +395,7 @@ class DistribStorage extends Storage {
       case 1: {
         if (buf.toString() === 'end') {
           this.state = 1;
-          this.dealBuffer();
+          this.dealRequestBuffer();
           break;
         }
         this.type = shiftOneByteArray.toInt(buf.subarray(0, 1));
@@ -437,13 +475,12 @@ class DistribStorage extends Storage {
     return sites;
   }
 
-  async dealError(callback) {
-    const { request: connection, } = this;
+  async dealError(socket, callback) {
     callback.bind(this);
     try {
       data = await callback();
-      connection.write(Buffer.from([1]));
-      connection.write(data);
+      socket.write(Buffer.from([1]));
+      socket.write(data);
     } catch (error) {
       const {
         options: {
@@ -453,57 +490,57 @@ class DistribStorage extends Storage {
       if (develop === true) {
         throw error;
       } else {
-        connection.write(Buffer.from([0]));
-        connection.write(error.message);
+        socket.write(Buffer.from([0]));
+        socket.write(error.message);
       }
     }
   }
 
-  async dealBuffer(buf) {
+  async dealRequestBuffer(buffer, socket) {
     const { state, } = this;
     switch (state) {
       case 0: {
-        if (buf.subarray(0, 7).toString() === 'distrib') {
-          const { length, } = buf;
-          buf = buf.subarray(7, length);
+        if (buffer.subarray(0, 7).toString() === 'distrib') {
+          const { length, } = buffer;
+          buffer = buffer.subarray(7, length);
           this.state = 2;
-          await this.dealBuffer(buf);
-        } else if (buf.subarray(0, 8).toString() === 'redirect') {
-          const { length, } = buf;
-          buf = buf.subarray(8, length);
+          await this.dealRequestBuffer(buffer);
+        } else if (buffer.subarray(0, 8).toString() === 'redirect') {
+          const { length, } = buffer;
+          buffer = buffer.subarray(8, length);
           this.state = 3;
-          await this.dealBuffer(buf);
+          await this.dealRequestBuffer(buffer);
         }
         break;
       }
       case 1: {
-        let { method, params, request: connection, } = this;
+        let { method, params, } = this;
         if (method !== '') {
           const { length, } = method;
           switch (method) {
             case 'realpath': {
-              await this.dealError(async () => {
+              await this.dealError(socket, async () => {
                 return await this[method](...params);
               });
               break;
             }
             case 'readData':
             case 'readBufferPiece': {
-              await this.dealError(async () => {
+              await this.dealError(socket, async () => {
                 return await this[method](...params);
               });
               break;
             }
             case 'glob':
             case 'readdir': {
-              await this.dealError(async () => {
+              await this.dealError(socket, async () => {
                 const array = await this[method](...params);
                 return JSON.stringify(array);
               });
               break;
             }
             case 'stats': {
-              await this.dealError(async () => {
+              await this.dealError(socket, async () => {
                 const stats = await this[method](...params);
                 return JSON.stringify(stats, (key, value) => {
                   return typeof value === 'bigint' ? Number(value) : value;
@@ -513,7 +550,7 @@ class DistribStorage extends Storage {
             }
             case 'diskOccupy': {
               const { byteArray, } = this;
-              await this.dealError(async () => {
+              await this.dealError(socket, async () => {
                 const bigInt = await this[method](...params);
                 return Buffer.from(byteArray.fromInt(bigInt));
               });
@@ -523,8 +560,8 @@ class DistribStorage extends Storage {
               try {
                 const { byteArray, } = this;
                 await this[method](...params);
-                connection.write(Buffer.from([1]));
-                connection.write(Buffer.from(byteArray.fromInt(1)));
+                socket.write(Buffer.from([1]));
+                socket.write(Buffer.from(byteArray.fromInt(1)));
               } catch (error) {
                 const {
                   options: {
@@ -535,11 +572,11 @@ class DistribStorage extends Storage {
                   throw error;
                 } else {
                   if (error instanceof ParameterError) {
-                    connection.write(Buffer.from([0]));
-                    connection.write(error.message);
+                    socket.write(Buffer.from([0]));
+                    socket.write(error.message);
                   } else {
-                    connection.write(Buffer.from([1]));
-                    connection.write(byteArray.fromInt(0));
+                    socket.write(Buffer.from([1]));
+                    socket.write(byteArray.fromInt(0));
                   }
                 }
               }
@@ -547,8 +584,8 @@ class DistribStorage extends Storage {
             default:
               try {
                 await this[method](...params);
-                connection.write(Buffer.from([1]));
-                connection.write('u');
+                socket.write(Buffer.from([1]));
+                socket.write('u');
               } catch (error) {
                 const {
                   options: {
@@ -558,26 +595,19 @@ class DistribStorage extends Storage {
                 if (develop === true) {
                   throw error;
                 } else {
-                  connection.write(Buffer.from([0]));
-                  connection.write(error.message);
+                  socket.write(Buffer.from([0]));
+                  socket.write(error.message);
                 }
               }
           }
         }
-        this.request = null;
-        this.status = 0;
-        this.params = [];
-        this.type = '';
-        this.method = '';
-        this.state = 0;
-        this.count -= 1;
+        this.resetAllStatus();
         break;
       }
       case 2: {
-        const { request: connection, } = this;
         try {
-          const sites = await this.dealDistribBuffer(buf);
-          connection.write(JSON.stringify([1, sites]));
+          const sites = await this.dealDistribBuffer(buffer);
+          socket.write(JSON.stringify([1, sites]));
         } catch (error) {
           const {
             options: {
@@ -587,61 +617,146 @@ class DistribStorage extends Storage {
           if (develop === true) {
             throw error;
           } else {
-            connection.write(JSON.stringify([0, error.message]));
+            socket.write(JSON.stringify([0, error.message]));
           }
         }
-        this.request = null;
-        this.method = '';
-        this.params = [];
-        this.state = 0;
-        this.count -= 1;
+        this.resetMethodStatus();
         break;
       }
       case 3:
         this.status = 0;
-        this.dealRedirectBuffer(buf);
+        this.dealRedirectBuffer(buffer);
         break;
     }
   }
 
-  setRequest(connection) {
-    this.request = connection;
-    connection.on('data', this.dealBuffer);
-    connection.on('error', (error) => {
-      this.request = null;
-    });
+  resetAllStatus() {
+    this.status = 0;
+    this.type = '';
+    this.resetMethodStatus();
   }
 
-  async setUpClients() {
+  resetMethodStatus() {
+    this.method = '';
+    this.state = 0;
+    this.params = [];
+    this.count -= 1;
+  }
+
+  async setUpServer() {
     try {
-      const { storages, } = this;
-      const clientPromises = storages.map((storage) => {
-        const [ip, port] = storage;
-        return new Promise((resolve, reject) => {
-          const client = net.createConnection(port, ip, () => {
-            client.ip = ip;
-            client.port = port;
-            resolve(client);
-          });
-          client.on('close', () => {
-            const { ip, port, } = client;
-            this.removeStorage(ip, port);
-          });
+      const {
+        storages: {
+          length,
+        },
+      } = this;
+      this.connections = [];
+      const { index, } = this;
+      if (length - index === 0) {
+        this.server = net.createServer((connection) => {
+          this.count += 1;
+          const { count, } = this;
+          if (count <= length - index) {
+            this.connections.push(connection);
+            connection.on('close', () => {
+              this.removeConnection(connection);
+            });
+          } else {
+            connection.on('data', (buffer) => {
+              this.dealReceiveAndSendBuffer(buffer, connection);
+            });
+            this.setUpSockets(false);
+          }
         });
-      });
-      this.clients = await Promise.all(clientPromises);
-      const { clients, } = this;
-      return clients;
+        const { server, } = this;
+        server.on('error', (error) => {
+          throw error;
+        });
+        const { port, } = this;
+        server.listen(port);
+      } else {
+        this.server = await new Promise((resolve, reject) => {
+          const server = net.createServer((connection) => {
+            this.count += 1;
+            connection.on('close', () => {
+              this.removeConnection(connection);
+            });
+            const { count, } = this;
+            if (count < length - index) {
+              this.connections.push(connection);
+            } else if (count === length - index) {
+              this.connections.push(connection);
+              resolve(server);
+            } else if (count > length - index) {
+              connection.on('data', (buffer) => {
+                this.dealReceiveAndSendBuffer(buffer, connection);
+              });
+              this.setUpSockets(false);
+            }
+          });
+          const { port, } = this;
+          server.on('error', (error) => {
+            throw error;
+          });
+          server.listen(port);
+        });
+      }
     } catch (error) {
     }
   }
 
-  async dealConnectionBuf(buf, connection) {
+  async setUpClients() {
+    try {
+      const { storages, index, } = this;
+      const clientPromises = [];
+      storages.map((storage) => {
+        const [_1, _2, i] = storage;
+        if (index > i && i >= 0) {
+          const [ip, port] = storage;
+          const clientPromise = new Promise((resolve, reject) => {
+            const client = net.createConnection(port, ip, () => {
+              client.ip = ip;
+              client.port = port;
+              resolve(client);
+            });
+            client.on('close', () => {
+              const { ip, port, } = client;
+              this.removeClient(client);
+            });
+          });
+          clientPromises.push(clientPromise);
+        }
+      });
+      this.clients = await Promise.all(clientPromises);
+    } catch (error) {
+    }
+  }
+
+  setUpSockets(bind) {
+    if (typeof bind !== 'boolean') {
+      throw new Error('[Error] The parameter bind should be boolean type.');
+    }
+    try {
+      const { clients, connections, } = this;
+      this.sockets = clients.concat(connections);
+      if (bind === true) {
+        const { sockets, } = this;
+        sockets.forEach((socket) => {
+          socket.on('data', (buffer) => {
+            this.dealReceiveAndSendBuffer(buffer, socket);
+          });
+        })
+      }
+    } catch (error) {
+    }
+  }
+
+  async dealReceiveBuffer(buffer, socket) {
     const segments = [];
     let s = 0;
-    for (let i = 0; i < buf.length; i += 1) {
-      if (buf[i] === 0) {
-        segments.push(buf.slice(s, i));
+    for (let i = 0; i < buffer.length; i += 1) {
+      if (buffer[i] === 0) {
+        segments.push(buffer.slice(s, i));
         s = i + 1;
       }
     }
@@ -653,18 +768,18 @@ class DistribStorage extends Storage {
       case 0: {
         const place = segments[0].toString();
         const exists = await this.exists(place);
-        connection.write(this.getBinBuf([0, exists, ip, port]));
+        socket.write(addDataFlag(0, this.getBinBuf([0, exists, ip, port])));
         break;
       }
       case 1: {
         const available = await this.available();
-        connection.write(this.getBinBuf([1, available, ip, port]));
+        socket.write(addDataFlag(0, this.getBinBuf([1, available, ip, port])));
         break;
       }
       case 2: {
         const place = segments[0].toString();
         const presence = await this.presence(place);
-        connection.write(this.getBinBuf([2, presence, ip, port]));
+        socket.write(addDataFlag(0, this.getBinBuf([2, presence, ip, port])));
         break;
       }
       default:
@@ -672,37 +787,40 @@ class DistribStorage extends Storage {
     }
   }
 
-  removeStorage(ip, port) {
-    const { storages, } = this;
-    for (let i = 0; i < storages.length; i += 1) {
-      const [storageIp, storagePort] = storages[i];
-      if (storageIp === ip && storagePort === port) {
-        storages.splice(i, 1);
-        const { clients, } = this;
-        if (Array.isArray(clients)) {
-          clients.splice(i, 1);
-          clients[i].destroySoon();
+  removeClient(client) {
+    try {
+      const { clients, } = this;
+      if (clients !== undefined) {
+        for (let i = 0; i < clients.length; i += 1) {
+          const currentClient = clients[i];
+          if (client === currentClient) {
+            clients.splice(i, 1);
+            currentClient.destroySoon();
+            this.setUpSockets(false);
+            break;
+          }
         }
-        break;
       }
+    } catch (error) {
     }
   }
 
-  async addStorage(ip, port) {
-    return new Promise((resolve, reject) => {
-      const client = net.createConnection(port, ip, () => {
-        client.ip = ip;
-        client.port = port;
-        resolve(client);
-      });
-      client.on('close', () => {
-        const { ip, port, } = client;
-        this.removeStorage(ip, port);
-      });
-      const { storages, clients, } = this;
-      storages.push([ip, port]);
-      clients.push(client);
-    });
+  removeConnection(connection) {
+    try {
+      const { connections, } = this;
+      if (connections !== undefined) {
+        for (let i = 0; i < clients.length; i += 1) {
+          const currentConneciton = connections[i];
+          if (connection === connections[i]) {
+            connections.splice(i, 1);
+            currentConnection.destroySoon();
+            this.setUpSockets(false);
+            break;
+          }
+        }
+      }
+    } catch (error) {
+    }
   }
 
   checkCombine() {
@@ -716,8 +834,8 @@ class DistribStorage extends Storage {
     try {
       this.checkCombine();
       const exists = await this.exists(place);
-      const responsePromises = this.getResponsePromises((client) => {
-        client.write(this.getBinBuf([0, place]));
+      const responsePromises = this.getResponsePromises((socket) => {
+        socket.write(addDataFlag(1, this.getBinBuf([0, place])));
       });
       const existsMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -732,8 +850,8 @@ class DistribStorage extends Storage {
     try {
       this.checkCombine();
       const available = await this.available();
-      const responsePromises = this.getResponsePromises((client) => {
-        client.write(this.getBinBuf([1]));
+      const responsePromises = this.getResponsePromises((socket) => {
+        socket.write(addDataFlag(1, this.getBinBuf([1])));
       });
       const availableMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;
@@ -748,8 +866,8 @@ class DistribStorage extends Storage {
     try {
       this.checkCombine();
       const presence = await this.presence(place);
-      const responsePromises = this.getResponsePromises((client) => {
-        client.write(this.getBinBuf([2, place]));
+      const responsePromises = this.getResponsePromises((socket) => {
+        socket.write(addDataFlag(1, this.getBinBuf([2, place])));
       });
       const presenceMessages = await Promise.all(responsePromises);
       const { ip, port, } = this;

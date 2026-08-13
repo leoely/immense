@@ -4,6 +4,21 @@ import {
 } from 'manner.js/server';
 import dataPromise from '~/lib/util/dataPromise';
 
+function addDataFlag(flag, data) {
+  if (!Number.isInteger(flag)) {
+    throw new Error('[Error] The parameter flag should be an integer type');
+  }
+  if (!Buffer.isBuffer(data) && typeof data !== 'string') {
+    throw new Error('[Error] The parameter buffer should be a buffer or string type.');
+  }
+  const fbytes = Buffer.from([flag]);
+  if (Buffer.isBuffer(data)) {
+    return Buffer.concat([fbytes, data]);
+  } else {
+    return Buffer.concat([fbytes, Buffer.from(data)]);
+  }
+}
+
 class StorageClient {
   constructor(options = {}, allStorages) {
     if (typeof options !== 'object' && options !== null) {
@@ -76,7 +91,7 @@ class StorageClient {
       case 'presence': {
         const result = await new Promise((resolve, reject) => {
           const client = net.createConnection(port, ip, async () => {
-            client.write('distrib');
+            client.write(addDataFlag(2, 'distrib'));
             client.write(name);
             client.write(JSON.stringify(params.slice(0, 1)));
             const buffer = await dataPromise(client);
@@ -102,7 +117,7 @@ class StorageClient {
       default: {
         const result = await new Promise((resolve, reject) => {
           const client = net.createConnection(port, ip, async () => {
-            client.write('distrib');
+            client.write(addStringFlag(2, 'distrib'));
             client.write(name);
             switch (name) {
               case 'realpath':
@@ -152,7 +167,7 @@ class StorageClient {
         const promises = sites.map(([ip, port]) => {
           return new Promise((resolve, reject) => {
             const client = net.createConnection(port, ip, async () => {
-              client.write('redirect');
+              client.write(addDataFlag(2, 'redirect'));
               client.write(name);
               client.write(Buffer.from([0]));
               params.forEach((param) => {
