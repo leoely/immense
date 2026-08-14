@@ -117,7 +117,7 @@ class StorageClient {
       default: {
         const result = await new Promise((resolve, reject) => {
           const client = net.createConnection(port, ip, async () => {
-            client.write(addStringFlag(2, 'distrib'));
+            client.write(addDataFlag(2, 'distrib'));
             client.write(name);
             switch (name) {
               case 'realpath':

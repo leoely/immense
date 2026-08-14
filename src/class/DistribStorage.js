@@ -136,7 +136,7 @@ class DistribStorage extends Storage {
     return this.getSockets().map((socket) => {
       return new Promise((resolve, reject) => {
         callback(socket);
-        eventEmitter.on('data:receive', (buf) => {
+        eventEmitter.once('data:receive', (buf) => {
           const segments = [];
           let s = 0;
           for (let i = 0; i < buf.length; i += 1) {
@@ -373,40 +373,40 @@ class DistribStorage extends Storage {
     }
   }
 
-  getRestBuffer(buf) {
-    const { length, } = buf;
+  getRestBuffer(buffer) {
+    const { length, } = buffer;
     const { size, } = this;
-    return buf.subarray(size, length);
+    return buffer.subarray(size, length);
   }
 
-  dealRedirectBuffer(buf) {
+  dealRedirectBuffer(buffer, socket) {
     const { status, byteArray, shiftOneByteArray, } = this;
     switch (status) {
       case 0: {
-        const index = buf.indexOf(0);
-        this.method = buf.subarray(0, index + 1).toString();
+        const index = buffer.indexOf(0);
+        this.method = buffer.subarray(0, index + 1).toString();
         const { method, } = this;
         this.method = method.substring(0, method.length - 1);
-        const { length, } = buf;
+        const { length, } = buffer;
         this.status = 1;
-        this.dealRedirectBuffer(buf.subarray(index + 1, length));
+        this.dealRedirectBuffer(buffer.subarray(index + 1, length), socket);
         break;
       }
       case 1: {
-        if (buf.toString() === 'end') {
+        if (buffer.toString() === 'end') {
           this.state = 1;
-          this.dealRequestBuffer();
+          this.dealRequestBuffer(buffer, socket);
           break;
         }
-        this.type = shiftOneByteArray.toInt(buf.subarray(0, 1));
-        let { length, } = buf;
-        buf = buf.subarray(1, length);
-        const index = buf.indexOf(0);
-        this.size = Number(shiftOneByteArray.toInt(buf.subarray(0, index)));
-        length = buf.length;
-        buf = buf.subarray(index + 1, length);
+        this.type = shiftOneByteArray.toInt(buffer.subarray(0, 1));
+        let { length, } = buffer;
+        buffer = buffer.subarray(1, length);
+        const index = buffer.indexOf(0);
+        this.size = Number(shiftOneByteArray.toInt(buffer.subarray(0, index)));
+        length = buffer.length;
+        buffer = buffer.subarray(index + 1, length);
         this.status = 2;
-        this.dealRedirectBuffer(buf);
+        this.dealRedirectBuffer(buffer, socket);
         break;
       }
       case 2: {
@@ -414,47 +414,47 @@ class DistribStorage extends Storage {
         switch (type) {
           case 0n: {
             const { size, } = this;
-            const string = buf.subarray(0, size).toString();
+            const string = buffer.subarray(0, size).toString();
             this.params.push(string);
             this.status = 1;
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buffer), socket);
             break;
           }
           case 1n: {
             const { size, } = this;
-            const json = buf.subarray(0, size).toString();
-            const { length, } = buf;
+            const json = buffer.subarray(0, size).toString();
+            const { length, } = buffer;
             const object = JSON.parse(json);
             this.params.push(object);
             this.status = 1;
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buffer), socket);
             break;
           }
           case 2n: {
             const { size, } = this;
-            const int = Number(byteArray.toInt(buf.subarray(0, size)));
-            const { length, } = buf;
+            const int = Number(byteArray.toInt(buffer.subarray(0, size)));
+            const { length, } = buffer;
             this.params.push(int);
             this.status = 1;
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buffer), socket);
             break;
           }
           case 3n: {
             const { size, } = this;
-            const bigInt = byteArray.toInt(buf.subarray(0, size));
-            const { length, } = buf;
+            const bigInt = byteArray.toInt(buffer.subarray(0, size));
+            const { length, } = buffer;
             this.params.push(bigInt);
             this.status = 1;
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buffer), socket);
             break;
           }
           case 4n: {
             const { size, } = this;
-            const buffer = buf.subarray(0, size);
-            const { length, } = buf;
-            this.params.push(buffer);
+            const restBuffer = buffer.subarray(0, size);
+            const { length, } = restBuffer;
+            this.params.push(restBuffer);
             this.status = 1;
-            this.dealRedirectBuffer(this.getRestBuffer(buf));
+            this.dealRedirectBuffer(this.getRestBuffer(buffer), socket);
             break;
           }
         }
@@ -504,12 +504,12 @@ class DistribStorage extends Storage {
           const { length, } = buffer;
           buffer = buffer.subarray(7, length);
           this.state = 2;
-          await this.dealRequestBuffer(buffer);
+          await this.dealRequestBuffer(buffer, socket);
         } else if (buffer.subarray(0, 8).toString() === 'redirect') {
           const { length, } = buffer;
           buffer = buffer.subarray(8, length);
           this.state = 3;
-          await this.dealRequestBuffer(buffer);
+          await this.dealRequestBuffer(buffer, socket);
         }
         break;
       }
@@ -606,7 +606,7 @@ class DistribStorage extends Storage {
       }
       case 2: {
         try {
-          const sites = await this.dealDistribBuffer(buffer);
+          const sites = await this.dealDistribBuffer(buffer, socket);
           socket.write(JSON.stringify([1, sites]));
         } catch (error) {
           const {
@@ -625,7 +625,7 @@ class DistribStorage extends Storage {
       }
       case 3:
         this.status = 0;
-        this.dealRedirectBuffer(buffer);
+        this.dealRedirectBuffer(buffer, socket);
         break;
     }
   }
@@ -997,6 +997,7 @@ class DistribStorage extends Storage {
         sites.push(site);
         const dontExists = await this.treatDontExistsDistrib(place2);
         if (dontExists !== true) {
+          console.log(place2);
           throw new Error('[Error] The path currently being operated on already exists.');
         }
         break;
