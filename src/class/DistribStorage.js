@@ -116,7 +116,7 @@ class DistribStorage extends Storage {
           break;
         case 'number':
           if (!Number.isInteger(param)) {
-            throw new Error('[Error] If the param type is a number, ite should be an integer.');
+            throw new Error('[Error] If the param type is a number, it should be an integer.');
           }
           pbytes.push(Array.from(shiftOneByteArray.fromInt(param)));
           break;
@@ -283,7 +283,7 @@ class DistribStorage extends Storage {
   getStorages() {
     const { storages, } = this;
     if (!Array.isArray(storages)) {
-      throw new Error('[Error] The status of storages in distributed routing.');
+      throw new Error('[Error] The current internal storage state is abnormal.');
     }
     return storages;
   }
