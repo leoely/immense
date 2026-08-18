@@ -1,6 +1,7 @@
 import EventEmitter from 'events';
 import net from 'net';
 import {
+  logUncaughtException,
   ByteArray,
   getGTMNowString,
   getOwnIpAddresses,
@@ -25,6 +26,8 @@ function addDataFlag(flag, data) {
   }
 }
 
+const bindedEventKey = Symbol('bindedEvent');
+
 class DistribStorage extends Storage {
   constructor(location, options, port, allStorages) {
     super(location, options);
@@ -41,22 +44,17 @@ class DistribStorage extends Storage {
     this.dealRequestBuffer = this.dealRequestBuffer.bind(this);
     this.dealReceiveBuffer = this.dealReceiveBuffer.bind(this);
     this.dealReceiveAndSendBuffer = this.dealReceiveAndSendBuffer.bind(this);
+    this.bindEvent();
   }
 
   static async combine(distribStorages) {
     if (!Array.isArray(distribStorages)) {
       throw new Error('[Error] The parameter distribStorages should be of array type.');
     }
-    const serverPromises = distribStorages.map((distribStorage) => {
-      return distribStorage.setUpServer();
+    const startPromises = distribStorages.map((distribStorage) => {
+      return distribStorage.start();
     });
-    const clientsPromises = distribStorages.map((distribStorage) => {
-      return distribStorage.setUpClients();
-    });
-    await Promise.all(serverPromises.concat(clientsPromises));
-    distribStorages.forEach((distribStorage) => {
-      distribStorage.setUpSockets(true);
-    });
+    await Promise.all(startPromises);
   }
 
   static async join(newDistribStorages, originDistribStorages, allStorages) {
@@ -78,15 +76,59 @@ class DistribStorage extends Storage {
       distribStorage.closeClients();
       delete distribStorage.clients;
     });
+    distribStorages.forEach((distribStorage) => {
+      distribStorage.closeConnections();
+      delete distribStorage.connections;
+    });
     for (let i = 0; i < distribStorages.length; i += 1) {
       const distribStorage = distribStorages[i];
       await distribStorage.closeServer();
       delete distribStorage.server;
     }
-    distribStorages.forEach((distribStorage) => {
-      distribStorage.closeConnections();
-      delete distribStorage.connections;
-    });
+  }
+
+  bindEvent() {
+    const {
+      options: {
+        logPath,
+      },
+    } = this;
+    if (process[bindedEventKey] !== true) {
+      process.once('uncaughtException', async (error, origin) => {
+        await this.close();
+        logUncaughtException(logPath, error);
+        throw error;
+      });
+      process.once('exit', async (code) => {
+        await this.close();
+      });
+      process[bindedEventKey] = true;
+    }
+  }
+
+  async close() {
+    try {
+      const { ip, port, } = this;
+      await this.removeStorageDistrib([ip, port]);
+      this.closeClients();
+      delete this.clients;
+      this.closeConnections();
+      delete this.connections;
+      this.closeServer();
+      delete this.server;
+    } catch (error) {
+    }
+  }
+
+  async start() {
+    try {
+      const serverPromise = this.setUpServer();
+      const clientsPromise = this.setUpClients();
+      await Promise.all([serverPromise, clientsPromise]);
+      this.setUpSockets(true);
+      this.checkMemory();
+    } catch (error) {
+    }
   }
 
   getBinBuf(params) {
@@ -177,6 +219,16 @@ class DistribStorage extends Storage {
                   case 2:
                     return Number(shiftOneByteArray.toInt(segment));
                   default:
+                    return segment.toString();
+                }
+              });
+              break;
+            case 3:
+              params = segments.map((segment, index) => {
+                switch (index) {
+                  case 1:
+                    return Number(shiftOneByteArray.toInt(segment));
+                  case 0:
                     return segment.toString();
                 }
               });
@@ -763,24 +815,65 @@ class DistribStorage extends Storage {
     const { shiftOneByteArray, } = this;
     const bigInt1 = shiftOneByteArray.toInt(segments.shift());
     const code = Number(bigInt1);
+    let params;
+    switch (code) {
+      case 1:
+        params = [];
+        break;
+      case 0:
+      case 2:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+          }
+        });
+      case 3:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+            case 1:
+              return shiftOneByteArray.toInt(segment);
+          }
+        });
+        break;
+    }
     const { ip, port, } = this;
     switch (code) {
       case 0: {
-        const place = segments[0].toString();
+        if (params.length !== 1) {
+          throw new Error('[Error] The parameters length should be equal to one.');
+        }
+        const place = params[0];
         const exists = await this.exists(place);
         socket.write(addDataFlag(0, this.getBinBuf([0, exists, ip, port])));
         break;
       }
       case 1: {
+        if (params.length !== 0) {
+          throw new Error('[Error] The parameters length should be equal to zero.');
+        }
         const available = await this.available();
         socket.write(addDataFlag(0, this.getBinBuf([1, available, ip, port])));
         break;
       }
       case 2: {
-        const place = segments[0].toString();
+        if (params.length !== 1) {
+          throw new Error('[Error] The parameters length should be equal to one.');
+        }
+        const place = params[0];
         const presence = await this.presence(place);
         socket.write(addDataFlag(0, this.getBinBuf([2, presence, ip, port])));
         break;
+      }
+      case 3: {
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameters length should be equal to two.');
+        }
+        const storage = params;
+        await this.removeStorage(storage);
+        socket.write(addDataFlag(0, this.getBinBuf([2, 'ack'])));
       }
       default:
         throw new Error('[Error] The code value should be in the range [0, 1]');
@@ -821,6 +914,17 @@ class DistribStorage extends Storage {
       }
     } catch (error) {
     }
+  }
+
+  removeStorage([ip, port]) {
+    const { storages, } = this;
+    this.storages = storages.filter(([rIp, rPort]) => {
+      if (rIp === ip && rPort === port) {
+        return false;
+      } else {
+        return true;
+      }
+    });
   }
 
   checkCombine() {
@@ -875,6 +979,24 @@ class DistribStorage extends Storage {
       return presenceMessages;
     } catch (error) {
       throw error;
+    }
+  }
+
+  async removeStorageDistrib(storage) {
+    try {
+      this.checkCombine();
+      this.removeStorage(storage);
+      const [ip, port] = storage;
+      const repsonsePromises = this.getResponsePromises((socket) => {
+        socket.write(addDataFlag(1, getBinBuf([3, ip, port])));
+      });
+      const ackMessages = await Promise.all(responsePromises);
+      ackMessages.forEach((ackMessage) => {
+        if (ackMessage !== 'ack') {
+          throw new Error('The deletion of storage was not completely successful.');
+        }
+      });
+    } catch (error) {
     }
   }
 
@@ -997,7 +1119,6 @@ class DistribStorage extends Storage {
         sites.push(site);
         const dontExists = await this.treatDontExistsDistrib(place2);
         if (dontExists !== true) {
-          console.log(place2);
           throw new Error('[Error] The path currently being operated on already exists.');
         }
         break;
