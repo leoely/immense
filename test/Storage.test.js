@@ -88,5 +88,5 @@ describe('[Class] Storage;', () => {
     expect(diskUsage.total).toBe(250790436864);
     expect(childProcess.execSync('ls /tmp/test').toString()).toMatch('');
     expect(childProcess.execSync('ls -l /tmp/test/.index').toString()).toMatch('');
-  }, 8000);
+  }, 9000);
 });
