@@ -717,6 +717,9 @@ class DistribStorage extends Storage {
             connection.on('data', (buffer) => {
               this.dealReceiveAndSendBuffer(buffer, connection);
             });
+            connection.on('error', (error) => {
+              console.log(error.stack);
+            });
             this.setUpSockets(false);
           }
         });
@@ -742,6 +745,9 @@ class DistribStorage extends Storage {
             } else if (count > length - index) {
               connection.on('data', (buffer) => {
                 this.dealReceiveAndSendBuffer(buffer, connection);
+              });
+              connection.on('error', (error) => {
+                console.log(error.stack);
               });
               this.setUpSockets(false);
             }
@@ -796,6 +802,9 @@ class DistribStorage extends Storage {
         sockets.forEach((socket) => {
           socket.on('data', (buffer) => {
             this.dealReceiveAndSendBuffer(buffer, socket);
+          });
+          socket.on('error', (error) => {
+            console.log(error.stack);
           });
         })
       }
