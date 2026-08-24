@@ -4,7 +4,12 @@ import path from 'path';
 import Fulmination from 'fulmination';
 import disk from 'diskusage';
 import {
+  NamespaceRouter,
+} from 'advising.js';
+import {
   ByteArray,
+  logOutOfMemory,
+  logInsufficientDiskSpace,
 } from 'manner.js/server';
 import radixSort from '~/lib/util/radixSort';
 import ParameterError from '~/class/ParameterError';
@@ -341,6 +346,12 @@ class Storage {
     if (!fs.existsSync(indexPath)) {
       fs.mkdirSync(indexPath);
     }
+    this.notice = new NamespaceRouter({
+      logLevel: 0,
+      interception: undefined,
+      debug: false,
+      hideError: true,
+    });
     this.indexPath = indexPath;
     this.shiftOneReasonBytes = new ByteArray({ size: 202n, shift: 1n, });
     this.shiftTwoBytes = new ByteArray({ size: 256n, shift: 2n, });
@@ -1225,6 +1236,134 @@ class Storage {
       this[temporaryDiskAvailableKey] = temporaryDiskAvailable;
     } else {
       options.acquireAvailableDelta = false;
+    }
+  }
+
+  checkMemory() {
+    const { options, } = this;
+    if (options.safeMemoryCapacity === undefined) {
+      options.safeMemoryCapacity = 0;
+    }
+    const {
+      options: {
+        safeMemoryCapacity,
+      },
+    } = this;
+    const {
+      temporaryMemorySwitch,
+    } = this;
+    let freemem = os.freemem();
+    if (temporaryMemorySwitch === true) {
+      freemem = safeMemoryCapacity;
+    }
+    let ans = false;
+    if (freemem > safeMemoryCapacity) {
+      ans = true;
+    } else {
+      const {
+        notice,
+      } = this;
+      const callback = notice.gain('mem>chk');
+      if (typeof callback === 'function') {
+        const {
+          global,
+        } = this;
+        callback(global);
+      }
+      logOutOfMemory(logPath, freemem);
+    }
+    return ans;
+  }
+
+  async checkDisk() {
+    const { options, } = this;
+    if (options.minimumStorageCapacity === undefined) {
+      options.minimumStorageCapacity = 0;
+    }
+    const {
+      options: {
+        minimumStorageCapacity,
+      },
+    } = this;
+    const available = await this.available();
+    if (available <= minimumStorageCapacity) {
+      const {
+        notice,
+      } = this;
+      const callback = notice.gain('disk>rem');
+      if (typeof callback === 'function') {
+        const {
+          global,
+        } = this;
+        callback(global);
+      }
+      logInsufficientDiskSpace(logPath, available);
+    }
+  }
+
+  setTemporaryMemorySwitch(temporaryMemorySwitch) {
+    if (typeof temporaryMemorySwitch !== 'boolean') {
+      throw new Error('[Error] Parameter temporaryMemorySwitch should be of boolean type.');
+    }
+    this.temporaryMemorySwitch = temporaryMemorySwitch;
+  }
+
+
+  setGlobal() {
+    this.global = global;
+  }
+
+  addSystemNotice(phrase, callback) {
+    if (typeof phrase !== 'string') {
+      throw new Error('[Error] The parameter phase should be a string type.');
+    }
+    if (typeof callback !== 'function') {
+      throw new Error('[Error] The parameter callback should be a function type.');
+    }
+    switch (phrase) {
+      case 'disk>rem':
+      case 'mem>chk': {
+        const { notice, } = this;
+        notice.attach(phrase, callback);
+        this.checkMemory();
+        break;
+      }
+      case 'rm>storage': {
+        const {
+          constructor: {
+            name,
+          },
+        } = this;
+        switch (name) {
+          case 'DistriStorage': {
+            const { notice, } = Outputable;
+            notice[phrase] = callback;
+            break;
+          }
+          default:
+            throw new Error('[Error] The add storage phrase is limited to WebRouter and WebDistribRouter.');
+        }
+        break;
+      }
+      case 'add>storage': {
+        const {
+          constructor: {
+            name,
+          },
+        } = this;
+        switch (name) {
+          case 'DistriStorage': {
+            const { notice, } = Outputable;
+            notice[phrase] = callback;
+            break;
+          }
+          default:
+            throw new Error('[Error] The add storage phrase is limited to WebRouter and WebDistribRouter.');
+        }
+        break;
+      }
+      default:
+        throw new Error('[Error] The current system notification phrase does not exist.');
     }
   }
 

@@ -126,6 +126,16 @@ class DistribStorage extends Storage {
       const clientsPromise = this.setUpClients();
       await Promise.all([serverPromise, clientsPromise]);
       this.setUpSockets(true);
+      const {
+        notice,
+        global,
+      } = this;
+      const callback = notice.gain('add>storage');
+      if (typeof callback === 'function') {
+        if (global !== undefined) {
+          callback(global, ip, port);
+        }
+      }
       this.checkMemory();
     } catch (error) {
     }
@@ -230,6 +240,16 @@ class DistribStorage extends Storage {
                     return Number(shiftOneByteArray.toInt(segment));
                   case 0:
                     return segment.toString();
+                }
+              });
+              break;
+            case 4:
+              params = segments.map((segment, index) => {
+                switch (index) {
+                  case 0:
+                    return segment.toString();
+                  case 1:
+                    return new Function('return ' + segment.toString())();
                 }
               });
               break;
@@ -884,6 +904,15 @@ class DistribStorage extends Storage {
         await this.removeStorage(storage);
         socket.write(addDataFlag(0, this.getBinBuf([2, 'ack'])));
       }
+      case 4: {
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameter length should be equal to two.');
+        }
+        const [phrase, callback] = params;
+        this.addSystemNotice(phrase, callback);
+        socket.write(addBufferFlag(0, Buffer.from('ack')));
+        break;
+      }
       default:
         throw new Error('[Error] The code value should be in the range [0, 1]');
     }
@@ -996,6 +1025,16 @@ class DistribStorage extends Storage {
       this.checkCombine();
       this.removeStorage(storage);
       const [ip, port] = storage;
+      const {
+        notice,
+        global,
+      } = this;
+      const callback = notice.gain('rm>table');
+      if (typeof callback === 'function') {
+        if (global !== undefined) {
+          callback(global, ip, port);
+        }
+      }
       const repsonsePromises = this.getResponsePromises((socket) => {
         socket.write(addDataFlag(1, getBinBuf([3, ip, port])));
       });
@@ -1006,6 +1045,20 @@ class DistribStorage extends Storage {
         }
       });
     } catch (error) {
+    }
+  }
+
+  async addSystemNoticeDistrib(phrase, callback) {
+    try {
+      this.checkCombine();
+      this.addSystemNotice(phrase, callback);
+      const ackPromises = this.getAckPromises((socket) => {
+        socket.write(addBufferFlag(1, getBinBuf([4, phrase, callback.toString()])));
+      });
+      await Promise.all(ackPromises);
+      this.outputDistribFunction('addSystemNotice distrib');
+    } catch (error) {
+      this.outputDistribFunctionError('addSystemNotice distrib', error);
     }
   }
 
