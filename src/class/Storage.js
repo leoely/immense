@@ -1358,14 +1358,14 @@ class Storage {
           },
         } = this;
         switch (name) {
-          case 'DistriStorage': {
-            const { notice, } = Outputable;
-            notice[phrase] = callback;
+          case 'DistribStorage': {
+            const { notice, } = this;
+            notice.attach(phrase, callback);
             this.checkMemory();
             break;
           }
           default:
-            throw new Error('[Error] The remove storage phrase is limited to WebRouter and WebDistribRouter.');
+            throw new Error('[Error] The remove storage phrase is limited to DistribStorage.');
         }
         break;
       }
@@ -1376,14 +1376,14 @@ class Storage {
           },
         } = this;
         switch (name) {
-          case 'DistriStorage': {
-            const { notice, } = Outputable;
-            notice[phrase] = callback;
+          case 'DistribStorage': {
+            const { notice, } = this;
+            notice.attach(phrase, callback);
             this.checkMemory();
             break;
           }
           default:
-            throw new Error('[Error] The add storage phrase is limited to WebRouter and WebDistribRouter.');
+            throw new Error('[Error] The add storage phrase is limited to DistribStorage.');
         }
         break;
       }

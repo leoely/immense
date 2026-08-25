@@ -2,7 +2,7 @@ import { constants } from 'node:fs/promises';
 import childProcess from 'child_process';
 import { Buffer, } from 'buffer';
 import { describe, expect, test, } from '@jest/globals';
-import { getOwnIpAddresses, } from 'manner.js/server';
+import { getOwnIpAddresses, getAddress, } from 'manner.js/server';
 import DistribStorage from '~/class/DistribStorage';
 import StorageClient from '~/class/StorageClient';
 
@@ -114,7 +114,7 @@ describe('[Class] DistribStorage;', () => {
     await DistribStorage.release([distribStorage1, distribStorage2]);
   }, 11000);
 
-  test('DistribStorage should be able to process add system notice related operations.', async () => {
+  test('DistribStorage should be able to process disk space system notice related operations.', async () => {
     const [ipAddress] = getOwnIpAddresses();
     const { ipv4, } = ipAddress;
     const storages = [
@@ -149,6 +149,43 @@ describe('[Class] DistribStorage;', () => {
     await storageClient.addBuffer('test-bigdata-operation/operation2.txt', Buffer.from('perform big data related operations.'));
     expect(global1.value1).toBe(11);
     expect(global2.value1).toBe(21);
+    await DistribStorage.release([distribStorage1, distribStorage2]);
+  });
+
+  test('DistribStorage should be able to process distrib system notice related operations.', async () => {
+    const [ipAddress] = getOwnIpAddresses();
+    const { ipv4, } = ipAddress;
+    const storages = [
+      [ipv4, 8010],
+      [ipv4, 8011],
+    ];
+    const newStorages = [
+      [ipv4, 8010],
+      [ipv4, 8011],
+      [ipv4, 8012],
+    ];
+    const distribStorage1 = new DistribStorage('/tmp/test13', {
+    }, 8010, storages);
+    const distribStorage2 = new DistribStorage('/tmp/test14', {
+    }, 8011, storages);
+    await DistribStorage.combine([distribStorage1, distribStorage2]);
+    const distribStorage3 = new DistribStorage('/tmp/test15', {
+    }, 8012, newStorages);
+    const global = {
+      address1: '',
+      address2: '',
+    }
+    distribStorage3.setGlobal(global);
+    distribStorage3.addSystemNotice('add>storage', (global, ip, port) => {
+      global.address1 = getAddress(ip, port);
+    });
+    await DistribStorage.join([distribStorage3], [distribStorage1, distribStorage2], newStorages);
+    expect(global.address1).toMatch('192.168.1.5:8012');
+    distribStorage3.addSystemNotice('rm>storage', (global, ip, port) => {
+      global.address2 = getAddress(ip, port);
+    });
+    await distribStorage3.close();
+    expect(global.address2).toMatch('192.168.1.5:8012');
     await DistribStorage.release([distribStorage1, distribStorage2]);
   });
 });

@@ -63,7 +63,7 @@ class DistribStorage extends Storage {
     });
     distribStorages = originDistribStorages.concat(newDistribStorages);
     distribStorages.forEach((distribStorage, index) => {
-      distribStoragee.index = index;
+      distribStorage.index = index;
     });
     await DistribStorage.combine(newDistribStorages);
   }
@@ -126,6 +126,7 @@ class DistribStorage extends Storage {
       const clientsPromise = this.setUpClients();
       await Promise.all([serverPromise, clientsPromise]);
       this.setUpSockets(true);
+      const { ip, port, } = this;
       const {
         notice,
         global,
@@ -260,8 +261,8 @@ class DistribStorage extends Storage {
     });
   }
 
-  setAllStorages(allStroages) {
-    if (Array.isArray(allStoragees) !== true) {
+  setAllStorages(allStorages) {
+    if (Array.isArray(allStorages) !== true) {
       throw new Error('[Error] The parameter all Storages should be array type.');
     }
     const { port, } = this;
@@ -285,7 +286,7 @@ class DistribStorage extends Storage {
         throw new Error('[Error] A port can only be bound to one storage');
       }
       let flag = true;
-      for (let i = 0; i< locations.length ; i += 1) {
+      for (let i = 0; i < locations.length ; i += 1) {
         const location = locations[i];
         const [ip] = storage;
         if (getAddress(ip, port) === location) {
@@ -1041,7 +1042,7 @@ class DistribStorage extends Storage {
         notice,
         global,
       } = this;
-      const callback = notice.gain('rm>table');
+      const callback = notice.gain('rm>storage');
       if (typeof callback === 'function') {
         if (global !== undefined) {
           callback(global, ip, port);
