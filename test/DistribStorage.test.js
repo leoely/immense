@@ -112,5 +112,43 @@ describe('[Class] DistribStorage;', () => {
     await storageClient.remove('test-bigdata-operation/link.txt');
     await storageClient.remove('test-bigdata-operation/operation1.txt');
     await DistribStorage.release([distribStorage1, distribStorage2]);
-  }, 9000);
+  }, 11000);
+
+  test('DistribStorage should be able to process add system notice related operations.', async () => {
+    const [ipAddress] = getOwnIpAddresses();
+    const { ipv4, } = ipAddress;
+    const storages = [
+      [ipv4, 8008],
+      [ipv4, 8009],
+    ];
+    const distribStorage1 = new DistribStorage('/tmp/test11', {
+    }, 8008, storages);
+    const distribStorage2 = new DistribStorage('/tmp/test12', {
+    }, 8009, storages);
+    await DistribStorage.combine([distribStorage1, distribStorage2]);
+    const global1 = {
+      first: true,
+      value1: 10,
+    };
+    distribStorage1.setGlobal(global1);
+    const global2 = {
+      first: true,
+      value1: 20,
+    };
+    distribStorage2.setGlobal(global2);
+    distribStorage1.setTemporaryDiskSwitch(true);
+    distribStorage2.setTemporaryDiskSwitch(true);
+    await distribStorage1.addSystemNoticeDistrib('disk>rem', (global) => {
+      if (global !== undefined && global.first === true) {
+        global.value1 += 1;
+        global.first = false;
+      }
+    });
+    const storageClient = new StorageClient({}, storages);
+    await storageClient.addBuffer('test-bigdata-operation/operation1.txt', Buffer.from('perform big data related operations.'));
+    await storageClient.addBuffer('test-bigdata-operation/operation2.txt', Buffer.from('perform big data related operations.'));
+    expect(global1.value1).toBe(11);
+    expect(global2.value1).toBe(21);
+    await DistribStorage.release([distribStorage1, distribStorage2]);
+  });
 });

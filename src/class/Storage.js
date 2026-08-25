@@ -1,5 +1,6 @@
 import fsPromises from 'fs/promises';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import Fulmination from 'fulmination';
 import disk from 'diskusage';
@@ -19,7 +20,6 @@ import writePromise from '~/lib/util/writePromise';
 import fsyncPromise from '~/lib/util/fsyncPromise';
 import openPromise from '~/lib/util/openPromise';
 import closePromise from '~/lib/util/closePromise';
-import watchPromise from '~/lib/util/watchPromise';
 
 function swapBlank(value) {
   switch (value) {
@@ -337,6 +337,7 @@ class Storage {
       acquireAvailableDelta: false,
       temporaryDiskAvailable: -1,
       temporaryDiskSwitch: false,
+      logPath: '/var/log/immense',
       develop: false,
       debug: false,
     };
@@ -375,6 +376,7 @@ class Storage {
       | **  ╚═╝╚═╝░░░░░╚═╝╚═╝░░░░░╚═╝╚══════╝╚═╝░░╚══╝╚═════╝░╚══════╝╚═╝░╚════╝░╚═════╝░
       `);
     }
+    this.checkMemory();
   }
 
   dealOptions() {
@@ -539,6 +541,7 @@ class Storage {
       await closePromise(fd);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async writeBuffer(place, buffer) {
@@ -568,6 +571,7 @@ class Storage {
       await closePromise(fd);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async addBuffer(place, buffer) {
@@ -598,6 +602,7 @@ class Storage {
       await closePromise(fd);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async appendData(place, data) {
@@ -627,6 +632,7 @@ class Storage {
       await closePromise(fd);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async remove(place) {
@@ -739,6 +745,7 @@ class Storage {
       await this.addEntireIndex(newPlace);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async diskOccupy(place) {
@@ -816,6 +823,7 @@ class Storage {
         await this.addEntireIndex(destPath);
       });
       this[temporaryUpdateDiskAvailableKey](availableDelta);
+      await this.checkDisk();
     }
     if (stats.isDirectory()) {
       const srcPosition = path.join(location, srcPath);
@@ -834,6 +842,7 @@ class Storage {
         await this[coverDirectoryIndexKey](destPath);
       });
       this[temporaryUpdateDiskAvailableKey](availableDelta);
+      await this.checkDisk();
     }
   }
 
@@ -845,9 +854,10 @@ class Storage {
         await this.addEntireIndex(path.join(directory, dirent.name));
       }
       if (dirent.isDirectory()) {
-        await this._coverDirectoryIndex(path.join(directory, dirent.name));
+        await this[coverDirectoryIndexKey](path.join(directory, dirent.name));
       }
     }
+    await this.checkDisk();
   }
 
   async link(targetPlace, linkPlace) {
@@ -890,6 +900,7 @@ class Storage {
       await fsPromises.symlink(targetFilePath, linkFilePath);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async stats(place) {
@@ -912,11 +923,7 @@ class Storage {
     if (!await existsPromise(filePath)) {
       throw new Error('[Error] The file being get stats does not exist.');
     }
-    let stat;
-    const availableDelta = await this.acquireAvailableDelta(async () => {
-      stat = await fsPromises.stat(filePath, { bigint: true, });
-    });
-    this[temporaryUpdateDiskAvailableKey](availableDelta);
+    const stat = await fsPromises.stat(filePath, { bigint: true, });
     return stat;
   }
 
@@ -979,6 +986,7 @@ class Storage {
       await fsPromises.chown(filePath, uid, gid);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async access(place, mod) {
@@ -1062,7 +1070,10 @@ class Storage {
       if (!await existsPromise(filePath)) {
         throw new Error('[Error] The file being watch does not exist.');
       }
-      return await watchPromise(filePath, options, listener);
+      const watcher = fs.watch(filePath, options, listener);
+      this.checkMemory();
+      await this.checkDisk();
+      return watcher;
     } else {
       const dirPath = filePath;
       if (!checkMultipleHidden(dirPath)) {
@@ -1071,7 +1082,10 @@ class Storage {
       if (!await existsPromise(filePath)) {
         throw new Error('[Error] The path to the operation does not exist.');
       }
-      return await watchPromise(dirPath, options, listener);
+      fs.watch(dirPath, options, listener);
+      this.checkMemory();
+      await this.checkDisk();
+      return watcher;
     }
   }
 
@@ -1113,6 +1127,7 @@ class Storage {
       await fsPromises.mkdir(position);
     });
     this[temporaryUpdateDiskAvailableKey](availableDelta);
+    await this.checkDisk();
   }
 
   async rmdir(directory, options) {
@@ -1237,6 +1252,7 @@ class Storage {
     } else {
       options.acquireAvailableDelta = false;
     }
+    this.checkMemory();
   }
 
   checkMemory() {
@@ -1297,6 +1313,11 @@ class Storage {
         } = this;
         callback(global);
       }
+      const {
+        options: {
+          logPath,
+        },
+      } = this;
       logInsufficientDiskSpace(logPath, available);
     }
   }
@@ -1306,11 +1327,13 @@ class Storage {
       throw new Error('[Error] Parameter temporaryMemorySwitch should be of boolean type.');
     }
     this.temporaryMemorySwitch = temporaryMemorySwitch;
+    this.checkMemory();
   }
 
 
-  setGlobal() {
+  setGlobal(global) {
     this.global = global;
+    this.checkMemory();
   }
 
   addSystemNotice(phrase, callback) {
@@ -1338,10 +1361,11 @@ class Storage {
           case 'DistriStorage': {
             const { notice, } = Outputable;
             notice[phrase] = callback;
+            this.checkMemory();
             break;
           }
           default:
-            throw new Error('[Error] The add storage phrase is limited to WebRouter and WebDistribRouter.');
+            throw new Error('[Error] The remove storage phrase is limited to WebRouter and WebDistribRouter.');
         }
         break;
       }
@@ -1355,6 +1379,7 @@ class Storage {
           case 'DistriStorage': {
             const { notice, } = Outputable;
             notice[phrase] = callback;
+            this.checkMemory();
             break;
           }
           default:
@@ -1503,6 +1528,7 @@ class Storage {
         }
       }
     }
+    await this.checkDisk();
   }
 
   async addIndexFile(pointersPath, code, frequency, name) {

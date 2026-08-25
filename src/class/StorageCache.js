@@ -678,7 +678,7 @@ class StorageCache {
     if (!Number.isInteger(start)) {
       throw new Error('[Error] The parameter start should be of integer type.');
     }
-    if (!(start > 0)) {
+    if (!(start >= 0)) {
       throw new Error('[Error] The parameter start should be of positive integer type.');
     }
     this.checkNotNull(place);
@@ -701,7 +701,7 @@ class StorageCache {
         blocks.push({
           type: 1,
           range: [begin, end],
-          data: string.substring(begin, end),
+          data: string.substring(begin, end + 1),
         });
       }
     } else if (Buffer.isBuffer(data)) {
@@ -712,7 +712,7 @@ class StorageCache {
         blocks.push({
           type: 1,
           range: [begin, end],
-          data: string.subarray(begin, end),
+          data: string.subarray(begin, end + 1),
         });
       }
     } else {

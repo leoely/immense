@@ -146,8 +146,8 @@ class DistribStorage extends Storage {
       throw new Error('[Error] The params parameter should be an array type.');
     }
     const { length, } = params;
-    if (length !== 1 && length !== 2 && length !== 4) {
-      throw new Error('[Error] The length of the params parameter should be equal to one,two or four.');
+    if (length !== 1 && length !== 2 && length !== 3 && length !== 4) {
+      throw new Error('[Error] The length of the params parameter should be equal to one,two,three or four.');
     }
     const pbytes = [];
     const { shiftOneByteArray, } = this;
@@ -857,6 +857,7 @@ class DistribStorage extends Storage {
               return segment.toString();
           }
         });
+        break;
       case 3:
         params = segments.map((segment, index) => {
           switch (index) {
@@ -864,6 +865,16 @@ class DistribStorage extends Storage {
               return segment.toString();
             case 1:
               return shiftOneByteArray.toInt(segment);
+          }
+        });
+        break;
+      case 4:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+            case 1:
+              return new Function('return ' + segment.toString())();
           }
         });
         break;
@@ -902,7 +913,8 @@ class DistribStorage extends Storage {
         }
         const storage = params;
         await this.removeStorage(storage);
-        socket.write(addDataFlag(0, this.getBinBuf([2, 'ack'])));
+        socket.write(addDataFlag(0, this.getBinBuf([3, 'ack'])));
+        break;
       }
       case 4: {
         if (params.length !== 2) {
@@ -910,7 +922,7 @@ class DistribStorage extends Storage {
         }
         const [phrase, callback] = params;
         this.addSystemNotice(phrase, callback);
-        socket.write(addBufferFlag(0, Buffer.from('ack')));
+        socket.write(addDataFlag(0, this.getBinBuf([4, 'ack'])));
         break;
       }
       default:
@@ -1036,12 +1048,12 @@ class DistribStorage extends Storage {
         }
       }
       const repsonsePromises = this.getResponsePromises((socket) => {
-        socket.write(addDataFlag(1, getBinBuf([3, ip, port])));
+        socket.write(addDataFlag(1, this.getBinBuf([3, ip, port])));
       });
-      const ackMessages = await Promise.all(responsePromises);
-      ackMessages.forEach((ackMessage) => {
-        if (ackMessage !== 'ack') {
-          throw new Error('The deletion of storage was not completely successful.');
+      const responseMessages = await Promise.all(responsePromises);
+      responseMessages.forEach(([responseMessage]) => {
+        if (responseMessage !== 'ack') {
+          throw new Error('The deletion of distrib storage was not completely successful.');
         }
       });
     } catch (error) {
@@ -1052,13 +1064,18 @@ class DistribStorage extends Storage {
     try {
       this.checkCombine();
       this.addSystemNotice(phrase, callback);
-      const ackPromises = this.getAckPromises((socket) => {
-        socket.write(addBufferFlag(1, getBinBuf([4, phrase, callback.toString()])));
+      const responsePromises = this.getResponsePromises((socket) => {
+        socket.write(addDataFlag(1, this.getBinBuf([4, phrase, callback.toString()])));
       });
-      await Promise.all(ackPromises);
-      this.outputDistribFunction('addSystemNotice distrib');
+      await Promise.all(responsePromises);
+      const responseMessages = await Promise.all(responsePromises);
+      responseMessages.forEach(([responseMessage]) => {
+        if (responseMessage !== 'ack') {
+          throw new Error('The add system notice distrib was not completely successful.');
+        }
+      });
     } catch (error) {
-      this.outputDistribFunctionError('addSystemNotice distrib', error);
+      throw error;
     }
   }
 
