@@ -1717,7 +1717,7 @@ class StorageCache {
     }
   }
 
-  overlapBlocks(place, blocks, dealPlace) {
+  instillBlocks(place, blocks, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
@@ -2050,24 +2050,25 @@ class StorageCache {
     return data;
   }
 
-  getSingleBlock(block, begin, end) {
+  getSingleBlock(block, range) {
     const { data, type, range: scope, } = block;
-    const range = [begin, end];
     const { place, } = this;
     const differentSections = getDifferenceSection(range, scope);
-    differentSections.forEach((section) => {
-      const [left, right] = section;
-      let occupy;
-      if (typeof block === 'string') {
-        occupy = getStringOccupy(getSectionLength(section));
-      }
-      if (Buffer.isBuffer(block)) {
-        occupy = getBufferOccupy(getSectionLength(section));
-      }
-      this.releaseOccupy(place, occupy);
-      const figure = this.requestStorageData(place, left, rigth);
-      this.adjunctionBlock(block, figure, left, right);
-    });
+    if (Array.isArray(differentSections) && differentSections.length > 0) {
+      differentSections.forEach((section) => {
+        const [left, right] = section;
+        let occupy;
+        if (typeof block === 'string') {
+          occupy = getStringOccupy(getSectionLength(section));
+        }
+        if (Buffer.isBuffer(block)) {
+          occupy = getBufferOccupy(getSectionLength(section));
+        }
+        this.releaseOccupy(place, occupy);
+        const figure = this.requestStorageData(place, left, rigth);
+        this.adjunctionBlock(block, figure, left, right);
+      });
+    }
     const interval = this.getBlockInterval(range);
     const [head, tail] = interval;
     if (typeof data === 'string') {
@@ -2078,27 +2079,28 @@ class StorageCache {
     }
   }
 
-  getBlock(blocks, index, begin, end) {
+  getBlock(block, begin, end) {
     const {
       options: {
         blockSize,
       },
     } = this;
     const range = [begin, end];
-    const block = blocks[index];
     const { type, range: scope, data, } = block;
+    const ans = [];
     switch (type) {
       case 0: {
         const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
-        this.getSingleBlock(block, section1);
-        this.getSingleBlock(block, section2);
+        ans.push(this.getSingleBlock(block, section1));
+        ans.push(this.getSingleBlock(block, section2));
         break;
       }
       case 1: {
-        this.getSingleBlock(block, range);
+        ans.push(this.getSingleBlock(block, range));
         break;
       }
     }
+    return ans;
   }
 
   getBlocks(place, range, dealPlace) {
@@ -2137,7 +2139,8 @@ class StorageCache {
       ans.push(this.getBlock(chunk, begin, end));
       return;
     } else {
-      ans.push(this.getBlock(chunk, (begin + 1) * blockSize));
+      const chunk = chunks[begin];
+      ans.push(this.getBlock(chunk, begin, (begin + 1) * blockSize - 1));
     }
     let ptr = (begin + 1) * blockSize;
     let count = begin + 1;
@@ -2149,12 +2152,12 @@ class StorageCache {
         ans.push(this.getBlock(chunk, ptr - blockSize, end));
         break;
       } else {
-        ans.push(this.getBlock(chunk, ptr - blockSize, ptr));
+        ans.push(this.getBlock(chunk, ptr - blockSize, ptr - 1));
       }
     }
     this.countSection(place, range);
     this.postOperation();
-    return ans;
+    return ans.flat();
   }
 
   getGroupBlocks(place, ranges) {
