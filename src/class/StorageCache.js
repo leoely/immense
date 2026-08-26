@@ -695,25 +695,31 @@ class StorageCache {
     const blocks = [];
     if (typeof data === 'string') {
       const string = data;
+      let index = 0;
       for (let i = 0; i < data.length; i += blockSize) {
         const begin = i + start;
         const end = i + blockSize - 1 + start;
         blocks.push({
+          index,
           type: 1,
           range: [begin, end],
           data: string.substring(begin, end + 1),
         });
+        index += 1;
       }
     } else if (Buffer.isBuffer(data)) {
       const buffer = data;
+      let index = 0;
       for (let i = 0; i < data.length; i += blockSize) {
         const begin = i + start;
         const end = i + blockSize - 1 + start;
         blocks.push({
+          index,
           type: 1,
           range: [begin, end],
           data: string.subarray(begin, end + 1),
         });
+        index += 1;
       }
     } else {
       throw new Error('[Error] The parameter data should be of string type or buffer type.');
@@ -1246,8 +1252,8 @@ class StorageCache {
       if (!Number.isInteger(index)) {
         throw new Error('[Error] The index parameter of the ' + idx + ' block should be an integer type.');
       }
-      if (!(index > 0)) {
-        throw new Error('[Error] The index parameter of the ' + idx + ' block should be a positive integer type.');
+      if (!(index >= 0)) {
+        throw new Error('[Error] The index parameter of the ' + idx + ' block should be an integer type.');
       }
       if (!Array.isArray(range)) {
         throw new Error('[Error] The range parameter of the ' + idx + ' block should be an array type.');
@@ -1259,8 +1265,8 @@ class StorageCache {
       if (!Number.isInteger(start)) {
         throw new Error('[Error] The start parameter of the ' + idx + ' block should be an integer type.');
       }
-      if (!(start > 0)) {
-        throw new Error('[Error] The start parameter of the ' + idx + ' block should be a positive integer type.');
+      if (!(start >= 0)) {
+        throw new Error('[Error] The start parameter of the ' + idx + ' block should be an integer type.');
       }
       if (!Number.isInteger(end)) {
         throw new Error('[Error] The end parameter of the ' + idx + ' block should be an integer type.');
@@ -1543,7 +1549,7 @@ class StorageCache {
     }
   }
 
-  addBlocks(place, range, figure) {
+  addBlocks(place, range, figure, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
@@ -1553,11 +1559,7 @@ class StorageCache {
       }
     }
     if (dealPlace !== false) {
-      place = this.getLinkPlace();
-    }
-    place = this.getLinkPlace(place);
-    if (!Array.isArray(blocks)) {
-      throw new Error('[Error] The parameter blocks should be an array type.');
+      place = this.getLinkPlace(place);
     }
     if (Buffer.isBuffer(figure) && typeof figure !== 'string') {
       throw new Error('[Error] The parameter blocks should be a buffer or string.');
@@ -1573,7 +1575,7 @@ class StorageCache {
       },
       blocks: chunks,
     } = digital;
-    this.checkBlocksContent(blocks);
+    this.checkBlocksContent(chunks);
     const [start, end] = range;
     const begin = Math.floor(start / blockSize) * blockSize;
     this.place = place;
@@ -1715,11 +1717,18 @@ class StorageCache {
     }
   }
 
-  overlapBlocks(place, blocks) {
+  overlapBlocks(place, blocks, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
-    place = this.getLinkPlace(place);
+    if (dealPlace !== undefined) {
+      if (dealPlace !== 'boolean') {
+        throw new Error('[Error] The parameter dealPlace should be a boolean type.');
+      }
+    }
+    if (dealPlace !== false) {
+      place = this.getLinkPlace(place);
+    }
     if (!Array.isArray(blocks)) {
       throw new Error('[Error] The parameter blocks should be an array type.');
     }
@@ -1739,12 +1748,8 @@ class StorageCache {
       });
       this.releaseOccupy(place, blocksOccupy);
     }
-    blocks.forEach(({ type, range, data, }) => {
-      const chunk = chunks[index];
-      if (chunk === undefined) {
-        throw new Error('[Error] The previous block does not exist,confirming the operation was correct.');
-      }
-      chunks[index] = { type: 1, range, data, };
+    blocks.forEach(({ index, type, range, data, }) => {
+      chunks[index] = { type, range, data, };
     });
   }
 
@@ -1913,7 +1918,7 @@ class StorageCache {
     if (index >= 0) {
       throw new Error('[Error] The parameter index should be greater than or equal to zero.')
     }
-    place = this.getLinkPlace();
+    place = this.getLinkPlace(place);
     this.check
     const {
       data,
@@ -1950,7 +1955,7 @@ class StorageCache {
       }
     }
     if (dealPlace !== false) {
-      place = this.getLinkPlace();
+      place = this.getLinkPlace(place);
     }
     this.checkRangeContent(range);
     const {
@@ -2106,7 +2111,7 @@ class StorageCache {
       }
     }
     if (dealPlace !== false) {
-      place = this.getLinkPlace();
+      place = this.getLinkPlace(place);
     }
     place = this.getLinkPlace(place);
     if (!Array.isArray(range)) {
