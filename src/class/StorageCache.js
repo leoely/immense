@@ -2137,7 +2137,7 @@ class StorageCache {
     if (end <= nextBorder) {
       const chunk = chunks[count];
       ans.push(this.getBlock(chunk, start, end));
-      return;
+      return ans.flat();
     } else {
       const chunk = chunks[count];
       ans.push(this.getBlock(chunk, start, nextBorder));
