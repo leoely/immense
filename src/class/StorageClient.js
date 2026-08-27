@@ -36,20 +36,35 @@ class StorageClient {
     this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
   }
 
-  async setUpServer() {
-    this.server = await new Promise((resolve, reject) => {
-      const server = net.createServer((connection) => {
-        connection.on('data', this.dealConnectionBuf);
-        connection.on('close', () => {
-          connection.destorySoon();
-        });
-        this.connection = connection;
-        resolve(server);
+  dealOptions() {
+    const {
+      options: {
+        ip,
+        port,
+      },
+    } = this;
+    if (typeof ip !== 'string') {
+      throw new Error('[Error] The option ip should be a string.');
+    }
+    if (!Number.isInteger(port)) {
+      throw new Error('[Error] The option portt should be an integet type.');
+    }
+    if (!(port > 0)) {
+      throw new Error('[Error] The option portt should be a positive integer.');
+    }
+  }
+
+  setUpServer() {
+    this.server = net.createServer((connection) => {
+      connection.on('data', this.dealConnectionBuf);
+      connection.on('close', () => {
+        connection.destorySoon();
       });
+      this.connection = connection;
     });
   }
 
-  dealConnectionBuf(buf, connection) {
+  async dealConnectionBuf(buf, connection) {
     const segments = [];
     let s = 0;
     for (let i = 0; i < buf.length; i += 1) {
@@ -90,18 +105,6 @@ class StorageClient {
       }
       default:
         throw new Error('[Error] The code value should be in the range [0, 0]');
-    }
-  }
-
-  dealOptions() {
-    const {
-      options: {
-        ip,
-        port,
-      },
-    } = this;
-    if (typeof ip !== 'string') {
-      throw new Error('[Error]');
     }
   }
 

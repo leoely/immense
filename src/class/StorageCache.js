@@ -3,6 +3,7 @@ import os from 'os';
 import { Buffer, } from 'buffer';
 import { FileRouter, } from 'advising.js';
 import {
+  ByteArray,
   checkLogPath,
   addToLog,
   appendToLog,
@@ -232,19 +233,16 @@ class StorageCache {
     this.checkMemory();
   }
 
-  async setUpStoClient() {
+  setUpClient() {
     try {
       const {
         ip,
         port,
       } = this;
-      this.stoClient = await new Promise((resolve, reject) => {
-        const client = net.createConnection(port, ip, () => {
-        });
-        client.on('close', () => {
-          client.destroySoon();
-        });
-        resolve(client);
+      this.client = net.createConnection(port, ip, () => {
+      });
+      client.on('close', () => {
+        client.destroySoon();
       });
     } catch (error) {
     }
@@ -838,8 +836,8 @@ class StorageCache {
       cacheDiskOccupy,
       bitWidth,
       safeMemoryCapacity,
-      storageIp,
-      storagePort,
+      ip,
+      port,
     } = options;
     if (threshold !== undefined) {
       if (typeof threshold !== 'number') {
@@ -889,13 +887,13 @@ class StorageCache {
     if (!(safeMemoryCapacity > 0)) {
       throw new Error('[Error] The option safeMemoryCapacity should be a positive integer.');
     }
-    if (!Number.isInteger(storagePort)) {
+    if (!Number.isInteger(port)) {
       throw new Error('[Error] The option storagePort should be a integer type.');
     }
-    if (!(storagePort > 0)) {
+    if (!(port > 0)) {
       throw new Error('[Error] The option storagePort should be a positive integer.');
     }
-    if (typeof storageIp !== 'string') {
+    if (typeof ip !== 'string') {
       throw new Error('[Error] The option storageIp should be of string type.');
     }
   }
@@ -2033,10 +2031,10 @@ class StorageCache {
   }
 
   async requestStorageData(place, left, right) {
-    const { stoClient, } = this;
-    stoClient.write(getBinBuf([0, place, left, right]));
+    const { client, } = this;
+    client.write(getBinBuf([0, place, left, right]));
     const data = await new Promise((resolve, reject) => {
-      stoClient.once('data', (data) => {
+      client.once('data', (data) => {
         resolve(data);
       });
     });

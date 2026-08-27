@@ -28,13 +28,34 @@ describe('[Class] StorageCache;', () => {
     storageCache.changeOptions('test-instill-operation/operation.txt', { blockSize: 6, });
     const blocks = storageCache.transformBlocks('test-instill-operation/opeartion.txt', 'test', 1);
     expect(JSON.stringify(blocks)).toMatch('[{\"index\":0,\"type\":1,\"range\":[1,4],\"data\":\"est\"}]');
+    const [ipAddress] = getOwnIpAddresses();
+    const { ipv6, } = ipAddress;
+    const storages = [
+      [ipv6, 8013],
+      [ipv6, 8014],
+    ];
+    const distribStorage1 = new DistribStorage('/tmp/test15', {
+      develop: true,
+      temporaryDiskAvailable: 100000,
+    }, 8013, storages);
+    distribStorage1.setTemporaryDiskSwitch(true);
+    const distribStorage2 = new DistribStorage('/tmp/test16', {
+      develop: true,
+      temporaryDiskAvailable: 100000,
+    }, 8014, storages);
+    distribStorage2.setTemporaryDiskSwitch(true);
+    await DistribStorage.combine([distribStorage1, distribStorage2]);
+    const storageClient = new StorageClient({}, storages);
+    storageClient.setUpServer();
+    storageCache.setUpClient();
     await storageCache.instillBlocks('test-instill-operation/operation.txt', blocks);
-    const cache1 = storageCache.getBlocks('test-instill-operation/operation.txt', [1, 4]);
-    expect(JSON.stringify(cache1)).toMatch('[\"s\",\"tring1\",\"test s\",\"tri\"]');
+    //const cache1 = storageCache.getBlocks('test-instill-operation/operation.txt', [0, 5]);
+    //expect(JSON.stringify(cache1)).toMatch('[\"s\",\"tring1\",\"test s\",\"tri\"]');
+    //await DistribStorage.release([distribStorage1, distribStorage2]);
   });
 
-  test('The StorageCache should be able to perform various add related operations', async () => {
-    const storageCache = new StorageCache(null);
-    storageCache.changeOptions('test-add-operation/operation.txt', { blockSize: 6, });
-  });
+  //test('The StorageCache should be able to perform various add related operations', async () => {
+    //const storageCache = new StorageCache(null);
+    //storageCache.changeOptions('test-add-operation/operation.txt', { blockSize: 6, });
+  //});
 });

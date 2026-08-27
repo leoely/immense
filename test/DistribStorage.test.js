@@ -54,7 +54,7 @@ describe('[Class] DistribStorage;', () => {
       temporaryDiskAvailable: 100000,
     }, 8007, storages);
     distribStorage2.setTemporaryDiskSwitch(true);
-    const storageclient = new storageclient({}, storages);
+    const storageClient = new StorageClient({}, storages);
     await DistribStorage.combine([distribStorage1, distribStorage2]);
     let exists = await storageClient.exists('test-bigdata-operation/backup.txt');
     expect(exists).toBe(false);
