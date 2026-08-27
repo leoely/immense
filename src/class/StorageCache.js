@@ -182,51 +182,55 @@ function getBinBuf(params) {
 }
 
 function dealStorageCacheConnectionBuf(buf, connection) {
-    const segments = [];
-    let s = 0;
-    for (let i = 0; i < buf.length; i += 1) {
-      if (buf[i] === 0) {
-        segments.push(buf.slice(s, i));
-        s = i + 1;
-      }
-    }
-    const bigInt1 = nonZeroByteArray.toInt(segments.shift());
-    const code = Number(bigInt1);
-    let params;
-    switch (code) {
-      case 0:
-      case 1:
-      case 2:
-        params = segments.map((segment, index) => {
-          switch (index) {
-            case 0:
-              return segment.toString();
-            default:
-              return JSON.stringify(segment.toString());
-          }
-        });
-        break;
-      case 3:
-        params = segments.map((segment, index) => {
-          switch (index) {
-            case 0:
-              return segment.toString();
-            default:
-              return nonZeroByteArray.toInt(segment);
-          }
-        });
-      case 4:
-        params = segments.map((segment, index) => {
-          switch (index) {
-            case 0:
-              return segment.toString();
-            default:
-              return segment.toString();
-          }
-        });
-        break;
+  const segments = [];
+  let s = 0;
+  for (let i = 0; i < buf.length; i += 1) {
+    if (buf[i] === 0) {
+      segments.push(buf.slice(s, i));
+      s = i + 1;
     }
   }
+  const bigInt1 = nonZeroByteArray.toInt(segments.shift());
+  const code = Number(bigInt1);
+  let params;
+  switch (code) {
+    case 0:
+    case 1:
+    case 2:
+      params = segments.map((segment, index) => {
+        switch (index) {
+          case 0:
+            return segment.toString();
+          default:
+            return JSON.stringify(segment.toString());
+        }
+      });
+      break;
+    case 3:
+      params = segments.map((segment, index) => {
+        switch (index) {
+          case 0:
+            return segment.toString();
+          default:
+            return nonZeroByteArray.toInt(segment);
+        }
+      });
+    case 4:
+      params = segments.map((segment, index) => {
+        switch (index) {
+          case 0:
+            return segment.toString();
+          default:
+            return segment.toString();
+        }
+      });
+      break;
+  }
+}
+
+function getNextBorder(id, blockSize) {
+  return Math.floor((id + blockSize) / blockSize) * blockSize - 1;
+}
 
 class StorageCache {
   constructor(options) {
@@ -823,12 +827,7 @@ class StorageCache {
     const [left, right] = section;
     const leftIndex = left % blockSize;
     const rightIndex = right % blockSize;
-    if (leftIndex === 0) {
-      return [leftIndex, rightIndex];
-    } else {
-      const offset = leftIndex;
-      return [leftIndex - offset, rightIndex - offset];
-    }
+    return [leftIndex, rightIndex];
   }
 
   dealOptions(options) {
@@ -2131,28 +2130,28 @@ class StorageCache {
       blocks: chunks,
     } = digital;
     const [start, end] = range;
-    const begin = Math.floor(start / blockSize) * blockSize;
     const ans = [];
     this.place = place;
-    if (end < ((begin + 1) * blockSize)) {
-      const chunk = chunks[begin];
-      ans.push(this.getBlock(chunk, begin, end));
+    const nextBorder = getNextBorder(start, blockSize);
+    let count = Math.floor(start / blockSize);
+    if (end <= nextBorder) {
+      const chunk = chunks[count];
+      ans.push(this.getBlock(chunk, start, end));
       return;
     } else {
-      const chunk = chunks[begin];
-      ans.push(this.getBlock(chunk, begin, (begin + 1) * blockSize - 1));
+      const chunk = chunks[count];
+      ans.push(this.getBlock(chunk, start, nextBorder));
     }
-    let ptr = (begin + 1) * blockSize;
-    let count = begin + 1;
+    let ptr = nextBorder;
     while (true) {
-      ptr += blockSize;
       count += 1;
       const chunk = chunks[count];
-      if (ptr >= end) {
-        ans.push(this.getBlock(chunk, ptr - blockSize, end));
+      ptr += 1;
+      if (end <= ptr + (blockSize - 1)) {
+        ans.push(this.getBlock(chunk, ptr, end));
         break;
       } else {
-        ans.push(this.getBlock(chunk, ptr - blockSize, ptr - 1));
+        ans.push(this.getBlock(chunk, ptr, ptr += (blockSize - 1)));
       }
     }
     this.countSection(place, range);
