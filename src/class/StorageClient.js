@@ -25,6 +25,9 @@ class StorageClient {
       throw new Error('[Error] The parameter options should be of type object.');
     }
     const defaultOptions = {
+      ip: '127.0.0.1',
+      port: 7000,
+      listen: true,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
@@ -32,6 +35,18 @@ class StorageClient {
     this.index = this.getRandomIndex();
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
+  }
+
+  dealOptions() {
+    const {
+      options: {
+        ip,
+        port,
+      },
+    } = this;
+    if (typeof ip !== 'string') {
+      throw new Error('[Error]');
+    }
   }
 
   getRandomIndex() {
@@ -54,14 +69,6 @@ class StorageClient {
       this.index += 1;
     }
     return this.index;
-  }
-
-  dealOptions() {
-    const {
-      options: {
-        port,
-      },
-    } = this;
   }
 
   dealParams(allStorages) {

@@ -232,6 +232,10 @@ function getNextBorder(id, blockSize) {
   return Math.floor((id + blockSize) / blockSize) * blockSize - 1;
 }
 
+function getBlockIndex(start, blockSize) {
+  return Math.floor(start / blockSize);
+}
+
 class StorageCache {
   constructor(options) {
     const defaultOptions = {
@@ -247,8 +251,9 @@ class StorageCache {
       cacheDiskOccupy: false,
       logPath: '/var/log/immense.js',
       safeMemoryCapacity: 4 * 1024 * 1024 * 1024,
-      storagePort: 7000,
-      storageIp: '127.0.0.1',
+      ip: '127.0.0.1',
+      port: 7000,
+      connection: true,
     };
     defaultOptions.bitWidth = getBitWidth();
     if (typeof options !== 'object' && options !== null) {
@@ -273,50 +278,20 @@ class StorageCache {
     this.checkMemory();
   }
 
-  async setUpStorageClient() {
+  async setUpStoClient() {
     try {
       const {
-        storageIp,
-        storagePort,
+        ip,
+        port,
       } = this;
       this.storageClient = await new Promise((resolve, reject) => {
-        const client = net.createConnection(storagePort, storageIp, () => {
-          client.ip = ip;
-          client.port = port;
+        const client = net.createConnection(port, ip, () => {
         });
         client.on('close', () => {
-          const { ip, port, } = lient;
+          client.destroySoon();
         });
         resolve(client);
       });
-    } catch (error) {
-    }
-  }
-
-  async setUpStorageCacheServer() {
-    try {
-      const {
-        tables: {
-          length,
-        },
-      } = this;
-      this.server = await new Promise((resolve, reject) => {
-        const server = net.createServer((connection) => {
-          connection.on('data', (buf) => {
-            dealStorageCacheConnectionBuf(buf, connection);
-          });
-          this.connection = connection;
-          resolve(server);
-        });
-        const { port, } = this;
-        server.on('error', (error) => {
-          throw error;
-        });
-        server.listen(port);
-      });
-      const { server, } = this;
-      this.checkMemory();
-      return server;
     } catch (error) {
     }
   }
@@ -696,33 +671,98 @@ class StorageCache {
         blockSize,
       },
     } = digital;
+    const { length, } = data;
     const blocks = [];
     if (typeof data === 'string') {
       const string = data;
-      let index = 0;
-      for (let i = 0; i < data.length; i += blockSize) {
-        const begin = i + start;
-        const end = i + blockSize - 1 + start;
-        blocks.push({
-          index,
-          type: 1,
-          range: [begin, end],
-          data: string.substring(begin, end + 1),
-        });
+      let index = getBlockIndex(start, blockSize);
+      let pointer = start;
+      while (true) {
+        if (pointer === start) {
+          const end = getNextBorder(start, blockSize);
+          if (end >= start + length - 1) {
+            blocks.push({
+              index,
+              type: 1,
+              range: [start, start + length - 1],
+              data: string.substring(start, end + 1),
+            });
+            break;
+          } else {
+            blocks.push({
+              index,
+              type: 1,
+              range: [start, end],
+              data: string.substring(start, end + 1),
+            });
+            pointer = end + 1;
+          }
+        } else if (pointer + blockSize - 1 >= start + length - 1) {
+          const end = start + length - 1;
+          blocks.push({
+            index,
+            type: 1,
+            range: [pointer, end],
+            data: string.substring(pointer, end + 1),
+          });
+          break;
+        } else {
+          const start = pointer;
+          pointer += blockSize - 1;
+          blocks.push({
+            index,
+            type: 1,
+            range: [start, pointer],
+            data: string.substring(start, pointer + 1),
+          });
+          pointer += 1;
+        }
         index += 1;
       }
     } else if (Buffer.isBuffer(data)) {
       const buffer = data;
-      let index = 0;
-      for (let i = 0; i < data.length; i += blockSize) {
-        const begin = i + start;
-        const end = i + blockSize - 1 + start;
-        blocks.push({
-          index,
-          type: 1,
-          range: [begin, end],
-          data: string.subarray(begin, end + 1),
-        });
+      let index = getBlockIndex(start, blockSize);
+      let pointer = start;
+      while (true) {
+        if (pointer === start) {
+          const end = getNextBorder(start, blockSize);
+          if (end >= start + length - 1) {
+            blocks.push({
+              index,
+              type: 1,
+              range: [start, start + length - 1],
+              data: buffer.subarray(start, end + 1),
+            });
+            break;
+          } else {
+            blocks.push({
+              index,
+              type: 1,
+              range: [start, end],
+              data: buffer.subarray(start, end + 1),
+            });
+            pointer = end + 1;
+          }
+        } else if (pointer + blockSize - 1 >= start + length - 1) {
+          const end = start + length - 1;
+          blocks.push({
+            index,
+            type: 1,
+            range: [pointer, end],
+            data: buffer.subarray(pointer, end + 1),
+          });
+          break;
+        } else {
+          const start = pointer;
+          pointer += blockSize - 1;
+          blocks.push({
+            index,
+            type: 1,
+            range: [start, pointer],
+            data: buffer.subarray(start, pointer + 1),
+          });
+          pointer += 1;
+        }
         index += 1;
       }
     } else {
@@ -2042,7 +2082,7 @@ class StorageCache {
     const { storageClient, } = this;
     storageClient.write(getBinBuf([0, place, left, right]));
     const data = await new Promise((resolve, reject) => {
-      storageClient.on('data', (data) => {
+      storageClient.once('data', (data) => {
         resolve(data);
       });
     });
