@@ -79,16 +79,11 @@ function getDifferenceSection(fullSection, removeSection) {
   const [removeLeft, removeRight] = removeSection;
   if (inSection(removeLeft, fullSection)) {
     ans.push([fullLeft, removeLeft - 1]);
-    if (removeRight <= fullRight) {
-      ans.push([removeRight, fullRight]);
-    }
   }
   if (inSection(removeRight, fullSection)) {
     ans.push([removeRight + 1, fullRight]);
-    if (removeLeft >= removeRight) {
-      ans.push([fullLeft, removeLeft]);
-    }
   }
+  return ans;
 }
 
 function getComplement(fullSection, removeSection) {
@@ -239,11 +234,12 @@ class StorageCache {
         ip,
         port,
       } = this;
-      this.client = net.createConnection(port, ip, () => {
+      const client = net.createConnection(port, ip, () => {
       });
       client.on('close', () => {
         client.destroySoon();
       });
+      this.client = client;
     } catch (error) {
     }
   }
@@ -310,12 +306,14 @@ class StorageCache {
       count,
     } = this;
     const quantity = count.gain(place);
-    const {
-      counts,
-    } = quantity;
-    quantity.orders = counts.map((e, i) => [e, i]);
-    quantity.orders = radixSort(this.orders);
-    quantity.outOfOrder = false;
+    if (quantity !== undefined) {
+      const {
+        amounts,
+      } = quantity;
+      quantity.orders = amounts.map((e, i) => [e, i]);
+      quantity.orders = radixSort(this.orders);
+      quantity.outOfOrder = false;
+    }
     this.checkMemory();
   }
 
@@ -1287,7 +1285,7 @@ class StorageCache {
     }
   }
 
-  setBlock(block, data, begin, end) {
+  async setBlock(block, data, begin, end) {
     const range = [begin, end];
     const { type, range: scope, } = block;
     const region = getComplement(range, scope);
@@ -1299,7 +1297,7 @@ class StorageCache {
         },
         place,
       } = this;
-      const figure = this.requestStorageData(place, left, right);
+      const figure = await this.requestStorageData(place, left, right);
       this.adjunctionBlock(block, data, left, right);
       this.updateAverageLength(getSectionLength(range));
       this.increaseFillNumber();
@@ -1455,7 +1453,7 @@ class StorageCache {
     }
   }
 
-  addReverseBlock(block, data, begin, end, blockSize) {
+  async addReverseBlock(block, data, begin, end, blockSize) {
     const [left, right] = range;
     const { data: digital, range: scope, } = block;
     const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
@@ -1503,7 +1501,7 @@ class StorageCache {
         const fillSection = [right + 1, right + 1 + length];
         block.range = [end + 1, right];
         const { place, } = this;
-        const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
+        const figure = await this.requestStorageData(place, fillSection[0], fillSection[1]);
         this.placeBlock(block, figure, 0, fillSection[0], fillSection[1]);
         this.updateAverageLength(length1);
         this.increaseFillNumber();
@@ -1512,7 +1510,7 @@ class StorageCache {
         block.range = [end + 1, right];
         block.range = [left, begin + 1];
         const { place, } = this;
-        const figure = this.requestStorageData(place, fillSection[0], fillSection[1]);
+        const figure = await this.requestStorageData(place, fillSection[0], fillSection[1]);
         this.placeBlock(block, figure, 1, fillSection[0], fillSection[1]);
         this.updateAverageLength(length2);
         this.increaseFillNumber();
@@ -1694,16 +1692,20 @@ class StorageCache {
       count,
     } = this;
     const quantity = count.gain(place);
-    const {
-      orders,
-    } = quantity;
-    for (let i = 0; i < orders.length; i += 1) {
-      const [_, idx] = orders[i];
-      const block = blocks[idx];
-      this.clearBlock(place, idx);
-      occupy -= this.getBlockOccupy(block);
-      if (occupy <= 0) {
-        break;
+    if (quantity !== undefined) {
+      const {
+        orders,
+      } = quantity;
+      if (Array.isArray(orders)) {
+        for (let i = 0; i < orders.length; i += 1) {
+          const [_, idx] = orders[i];
+          const block = blocks[idx];
+          this.clearBlock(place, idx);
+          occupy -= this.getBlockOccupy(block);
+          if (occupy <= 0) {
+            break;
+          }
+        }
       }
     }
   }
@@ -1746,23 +1748,23 @@ class StorageCache {
 
   checkRangeContent(range) {
     if (!Array.isArray(range)) {
-      throw new Error('[Error] The parameter indexs should be an array type.');
+      throw new Error('[Error] The parameter range should be an array type.');
     }
     const [start, end] = range;
     if (!Number.isInteger(start)) {
-      throw new Error('[Error] The start parameter of the ' + idx + ' range should be an integer type.');
+      throw new Error('[Error] The parameter start should be an integer type.');
     }
-    if (!(start > 0)) {
-      throw new Error('[Error] The start parameter of the ' + idx + ' range should be a positive integer type.');
+    if (!(start >= 0)) {
+      throw new Error('[Error] The parameter start should be greater than or equal zero.');
     }
     if (!Number.isInteger(end)) {
-      throw new Error('[Error] The end parameter of the ' + idx + ' range should be an integer type.');
+      throw new Error('[Error] The parameter end should be an integer type.');
     }
     if (!(end > 0)) {
-      throw new Error('[Error] The end parameter of the ' + idx + ' range should be a positive integer type.');
+      throw new Error('[Error] The parameter end should be a positive integer type.');
     }
     if (start > end) {
-      throw new Error('[Error] The start parameter of the ' + idx + ' should be less than or equal to correspond the end parameter.');
+      throw new Error('[Error] The parameter start of should be less than or equal to correspond the parameter end.');
     }
   }
 
@@ -2041,12 +2043,12 @@ class StorageCache {
     return data;
   }
 
-  getSingleBlock(block, range) {
+  async getSingleBlock(block, range) {
     const { data, type, range: scope, } = block;
     const { place, } = this;
     const differentSections = getDifferenceSection(range, scope);
     if (Array.isArray(differentSections) && differentSections.length > 0) {
-      differentSections.forEach((section) => {
+      for await (const section of differentSections) {
         const [left, right] = section;
         let occupy;
         if (typeof block === 'string') {
@@ -2056,9 +2058,9 @@ class StorageCache {
           occupy = getBufferOccupy(getSectionLength(section));
         }
         this.releaseOccupy(place, occupy);
-        const figure = this.requestStorageData(place, left, rigth);
+        const figure = await this.requestStorageData(place, left, right);
         this.adjunctionBlock(block, figure, left, right);
-      });
+      }
     }
     const interval = this.getBlockInterval(range);
     const [head, tail] = interval;
@@ -2070,7 +2072,7 @@ class StorageCache {
     }
   }
 
-  getBlock(block, begin, end) {
+  async getBlock(block, begin, end) {
     const {
       options: {
         blockSize,
@@ -2082,19 +2084,19 @@ class StorageCache {
     switch (type) {
       case 0: {
         const [section1, section2] = getDifferenceSection([0, blockSize - 1], scope);
-        ans.push(this.getSingleBlock(block, section1));
-        ans.push(this.getSingleBlock(block, section2));
+        ans.push(await this.getSingleBlock(block, section1));
+        ans.push(await this.getSingleBlock(block, section2));
         break;
       }
       case 1: {
-        ans.push(this.getSingleBlock(block, range));
+        ans.push(await this.getSingleBlock(block, range));
         break;
       }
     }
     return ans;
   }
 
-  getBlocks(place, range, dealPlace) {
+  async getBlocks(place, range, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
@@ -2106,7 +2108,6 @@ class StorageCache {
     if (dealPlace !== false) {
       place = this.getLinkPlace(place);
     }
-    place = this.getLinkPlace(place);
     if (!Array.isArray(range)) {
       throw new Error('[Error] The parameter indexs should be an array type.');
     }
@@ -2128,11 +2129,11 @@ class StorageCache {
     let count = Math.floor(start / blockSize);
     if (end <= nextBorder) {
       const chunk = chunks[count];
-      ans.push(this.getBlock(chunk, start, end));
+      ans.push(await this.getBlock(chunk, start, end));
       return ans.flat();
     } else {
       const chunk = chunks[count];
-      ans.push(this.getBlock(chunk, start, nextBorder));
+      ans.push(await this.getBlock(chunk, start, nextBorder));
     }
     let ptr = nextBorder;
     while (true) {
@@ -2140,10 +2141,10 @@ class StorageCache {
       const chunk = chunks[count];
       ptr += 1;
       if (end <= ptr + (blockSize - 1)) {
-        ans.push(this.getBlock(chunk, ptr, end));
+        ans.push(await this.getBlock(chunk, ptr, end));
         break;
       } else {
-        ans.push(this.getBlock(chunk, ptr, ptr += (blockSize - 1)));
+        ans.push(await this.getBlock(chunk, ptr, ptr += (blockSize - 1)));
       }
     }
     this.countSection(place, range);
@@ -2151,17 +2152,25 @@ class StorageCache {
     return ans.flat();
   }
 
-  getGroupBlocks(place, ranges) {
+  async getGroupBlocks(place, ranges, dealPlace) {
     if (typeof place !== 'string') {
       throw new Error('[Error] The parameter place should be a string type.');
     }
     if (!Array.isArray(ranges)) {
       throw new Error('[Error] The parameter indexs should be an array type.');
     }
+    if (dealPlace !== undefined) {
+      if (dealPlace !== 'boolean') {
+        throw new Error('[Error] The parameter dealPlace should be a boolean type.');
+      }
+    }
+    if (dealPlace !== false) {
+      place = this.getLinkPlace(place);
+    }
     const ans = [];
-    ranges.forEach((range) => {
-      ans.push(this.getBlocks(place, range, false));
-    });
+    for await (const range of ranges) {
+      ans.push(await this.getBlocks(place, range));
+    }
     return ans;
   }
 }

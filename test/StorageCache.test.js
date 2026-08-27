@@ -49,9 +49,9 @@ describe('[Class] StorageCache;', () => {
     storageClient.setUpServer();
     storageCache.setUpClient();
     await storageCache.instillBlocks('test-instill-operation/operation.txt', blocks);
-    //const cache1 = storageCache.getBlocks('test-instill-operation/operation.txt', [0, 5]);
-    //expect(JSON.stringify(cache1)).toMatch('[\"s\",\"tring1\",\"test s\",\"tri\"]');
-    //await DistribStorage.release([distribStorage1, distribStorage2]);
+    const cache1 = storageCache.getBlocks('test-instill-operation/operation.txt', [0, 5]);
+    expect(JSON.stringify(cache1)).toMatch('[\"s\",\"tring1\",\"test s\",\"tri\"]');
+    await DistribStorage.release([distribStorage1, distribStorage2]);
   });
 
   //test('The StorageCache should be able to perform various add related operations', async () => {

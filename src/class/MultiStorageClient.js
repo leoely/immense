@@ -6,6 +6,60 @@ class MultiStorageClient {
     this.index = 0;
   }
 
+  setUpServer() {
+    this.server = net.createServer((connection) => {
+      connection.on('data', this.dealConnectionBuf);
+      connection.on('close', () => {
+        connection.destorySoon();
+      });
+      this.connection = connection;
+    });
+  }
+
+  async dealConnectionBuf(buf, connection) {
+    const segments = [];
+    let s = 0;
+    for (let i = 0; i < buf.length; i += 1) {
+      if (buf[i] === 0) {
+        segments.push(buf.slice(s, i));
+        s = i + 1;
+      }
+    }
+    const bigInt1 = nonZeroByteArray.toInt(segments.shift())
+    const code = Number(bigInt1);
+    let params;
+    switch (code) {
+      case 0:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+            case 1:
+            case 2:
+              return Number(nonZeroByteArray.toInt(segment));
+          }
+        });
+        break;
+      default:
+        params = segments.map((segment) => {
+          return nonZeroByteArray.toInt(segment);
+        });
+    }
+    switch (code) {
+      case 0: {
+        if (params.length !== 3) {
+          throw new Error('[Error] The parameters length should be equal to two.');
+        }
+        const [place, left, right] = params;
+        const data = await this.readBufferPiece(place, left, right - left + 1);
+        connection.write(data);
+        break;
+      }
+      default:
+        throw new Error('[Error] The code value should be in the range [0, 0]');
+    }
+  }
+
   addStorageClient(storageClient) {
     if (!(storageClient instanceof StorageClient)) {
       throw new Error('[Error] The type of storageClient added is incorrect.');
