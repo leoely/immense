@@ -36,7 +36,7 @@ class StorageClient {
     this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
   }
 
-  async setUpStoServer() {
+  async setUpServer() {
     this.server = await new Promise((resolve, reject) => {
       const server = net.createServer((connection) => {
         connection.on('data', this.dealConnectionBuf);
@@ -62,13 +62,14 @@ class StorageClient {
     const code = Number(bigInt1);
     let params;
     switch (code) {
-      case 4:
+      case 0:
         params = segments.map((segment, index) => {
           switch (index) {
             case 0:
               return segment.toString();
             case 1:
-              return new Function('return ' + segment.toString())();
+            case 2:
+              return Number(nonZeroByteArray.toInt(segment));
           }
         });
         break;
@@ -79,57 +80,16 @@ class StorageClient {
     }
     switch (code) {
       case 0: {
-        if (params.length !== 2) {
+        if (params.length !== 3) {
           throw new Error('[Error] The parameters length should be equal to two.');
         }
-        const [id, total] = params;
-        this.deleteExchange(Number(id), Number(total), true);
-        connection.write('ack');
-        break;
-      }
-      case 1: {
-        if (params.length !== 1) {
-          throw new Error('[Error] The parameter length should be equal to one.');
-        }
-        const [id] = params;
-        this.deleteDataById(Number(id));
-        this.outOfOrder = true;
-        this.full = false;
-        connection.write('ack');
-        break;
-      }
-      case 2: {
-        if (params.length !== 2) {
-          throw new Error('[Error] The parameters length should be equal to two.');
-        }
-        const [id1, id2] = params;
-        this.deleteDataById(Number(id1));
-        this.deleteDataById(Number(id2));
-        this.outOfOrder = true;
-        this.full = false;
-        connection.write('ack');
-        break;
-      }
-      case 3: {
-        if (params.length !== 1) {
-          throw new Error('[Error] The parameter length should be equal to one.');
-        }
-        const [highId] = params;
-        const mapping = this.exchangeHighIndex(Number(highId), true);
-        connection.write('ack');
-        return mapping;
-      }
-      case 4: {
-        if (params.length !== 2) {
-          throw new Error('[Error] The parameters length should be equal to two.');
-        }
-        const [phrase, callback] = params;
-        this.addSystemNotice(phrase, callback);
-        connection.write('ack');
+        const [place, left, right] = params;
+        const data = await this.readBufferPiece(place, left, right - left + 1);
+        connection.write(data);
         break;
       }
       default:
-        throw new Error('[Error] The code value should be in the range [0, 4]');
+        throw new Error('[Error] The code value should be in the range [0, 0]');
     }
   }
 

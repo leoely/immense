@@ -183,80 +183,6 @@ function getDataOccupy(data) {
   }
 }
 
-function getBinBuf(params) {
-  if (!Array.isArray(params)) {
-    throw new Error('[Error] The params parameter should be an array type.');
-  }
-  const { length, } = params;
-  if (length <= 1) {
-    throw new Error('[Error] The length of the params parameter should be greater than or equal to two');
-  }
-  const pbytes = [];
-  params.forEach((param) => {
-    switch (typeof param) {
-      case 'string':
-        pbytes.push(Array.from(Buffer.from(param)));
-        break;
-      case 'number':
-        if (!Number.isInteger(param)) {
-          throw new Error('[Error] If the param type is a number, ite should be an integer.');
-        }
-        pbytes.push(Array.from(nonZeroByteArray.fromInt(param)));
-        break;
-    }
-    pbytes.push(0);
-  });
-  const buf = Buffer.from(pbytes.flat());
-  return buf;
-}
-
-function dealStorageCacheConnectionBuf(buf, connection) {
-  const segments = [];
-  let s = 0;
-  for (let i = 0; i < buf.length; i += 1) {
-    if (buf[i] === 0) {
-      segments.push(buf.slice(s, i));
-      s = i + 1;
-    }
-  }
-  const bigInt1 = nonZeroByteArray.toInt(segments.shift());
-  const code = Number(bigInt1);
-  let params;
-  switch (code) {
-    case 0:
-    case 1:
-    case 2:
-      params = segments.map((segment, index) => {
-        switch (index) {
-          case 0:
-            return segment.toString();
-          default:
-            return JSON.stringify(segment.toString());
-        }
-      });
-      break;
-    case 3:
-      params = segments.map((segment, index) => {
-        switch (index) {
-          case 0:
-            return segment.toString();
-          default:
-            return nonZeroByteArray.toInt(segment);
-        }
-      });
-    case 4:
-      params = segments.map((segment, index) => {
-        switch (index) {
-          case 0:
-            return segment.toString();
-          default:
-            return segment.toString();
-        }
-      });
-      break;
-  }
-}
-
 function getNextBorder(id, blockSize) {
   return Math.floor((id + blockSize) / blockSize) * blockSize - 1;
 }
@@ -306,13 +232,13 @@ class StorageCache {
     this.checkMemory();
   }
 
-  async setUpClient() {
+  async setUpStoClient() {
     try {
       const {
         ip,
         port,
       } = this;
-      this.client = await new Promise((resolve, reject) => {
+      this.stoClient = await new Promise((resolve, reject) => {
         const client = net.createConnection(port, ip, () => {
         });
         client.on('close', () => {
@@ -2107,10 +2033,10 @@ class StorageCache {
   }
 
   async requestStorageData(place, left, right) {
-    const { client, } = this;
-    client.write(getBinBuf([0, place, left, right]));
+    const { stoClient, } = this;
+    stoClient.write(getBinBuf([0, place, left, right]));
     const data = await new Promise((resolve, reject) => {
-      storageClient.once('data', (data) => {
+      stoClient.once('data', (data) => {
         resolve(data);
       });
     });
