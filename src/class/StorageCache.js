@@ -11,6 +11,35 @@ import {
 } from 'manner.js/server';
 import radixSort from '~/lib/util/radixSort';
 
+const nonZeroByteArray = new ByteArray({ size: 256n, shift: 1n, });
+
+function getBinBuf(params) {
+  if (!Array.isArray(params)) {
+    throw new Error('[Error] The params parameter should be an array type.');
+  }
+  const { length, } = params;
+  if (length <= 1) {
+    throw new Error('[Error] The length of the params parameter should be greater than or equal to two');
+  }
+  const pbytes = [];
+  params.forEach((param) => {
+    switch (typeof param) {
+      case 'string':
+        pbytes.push(Array.from(Buffer.from(param)));
+        break;
+      case 'number':
+        if (!Number.isInteger(param)) {
+          throw new Error('[Error] If the param type is a number, ite should be an integer.');
+        }
+        pbytes.push(Array.from(nonZeroByteArray.fromInt(param)));
+        break;
+    }
+    pbytes.push(0);
+  });
+  const buf = Buffer.from(pbytes.flat());
+  return buf;
+}
+
 function getBetweenLength(section1, section2) {
   const [l1, r1] = sectinon1;
   const [l2, r2] = sectinon2;
@@ -253,7 +282,6 @@ class StorageCache {
       safeMemoryCapacity: 4 * 1024 * 1024 * 1024,
       ip: '127.0.0.1',
       port: 7000,
-      connection: true,
     };
     defaultOptions.bitWidth = getBitWidth();
     if (typeof options !== 'object' && options !== null) {
@@ -278,13 +306,13 @@ class StorageCache {
     this.checkMemory();
   }
 
-  async setUpStoClient() {
+  async setUpClient() {
     try {
       const {
         ip,
         port,
       } = this;
-      this.storageClient = await new Promise((resolve, reject) => {
+      this.client = await new Promise((resolve, reject) => {
         const client = net.createConnection(port, ip, () => {
         });
         client.on('close', () => {
@@ -2079,8 +2107,8 @@ class StorageCache {
   }
 
   async requestStorageData(place, left, right) {
-    const { storageClient, } = this;
-    storageClient.write(getBinBuf([0, place, left, right]));
+    const { client, } = this;
+    client.write(getBinBuf([0, place, left, right]));
     const data = await new Promise((resolve, reject) => {
       storageClient.once('data', (data) => {
         resolve(data);

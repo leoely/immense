@@ -27,7 +27,6 @@ class StorageClient {
     const defaultOptions = {
       ip: '127.0.0.1',
       port: 7000,
-      listen: true,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
@@ -35,6 +34,103 @@ class StorageClient {
     this.index = this.getRandomIndex();
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });
+  }
+
+  async setUpStoServer() {
+    this.server = await new Promise((resolve, reject) => {
+      const server = net.createServer((connection) => {
+        connection.on('data', this.dealConnectionBuf);
+        connection.on('close', () => {
+          connection.destorySoon();
+        });
+        this.connection = connection;
+        resolve(server);
+      });
+    });
+  }
+
+  dealConnectionBuf(buf, connection) {
+    const segments = [];
+    let s = 0;
+    for (let i = 0; i < buf.length; i += 1) {
+      if (buf[i] === 0) {
+        segments.push(buf.slice(s, i));
+        s = i + 1;
+      }
+    }
+    const bigInt1 = nonZeroByteArray.toInt(segments.shift())
+    const code = Number(bigInt1);
+    let params;
+    switch (code) {
+      case 4:
+        params = segments.map((segment, index) => {
+          switch (index) {
+            case 0:
+              return segment.toString();
+            case 1:
+              return new Function('return ' + segment.toString())();
+          }
+        });
+        break;
+      default:
+        params = segments.map((segment) => {
+          return nonZeroByteArray.toInt(segment);
+        });
+    }
+    switch (code) {
+      case 0: {
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameters length should be equal to two.');
+        }
+        const [id, total] = params;
+        this.deleteExchange(Number(id), Number(total), true);
+        connection.write('ack');
+        break;
+      }
+      case 1: {
+        if (params.length !== 1) {
+          throw new Error('[Error] The parameter length should be equal to one.');
+        }
+        const [id] = params;
+        this.deleteDataById(Number(id));
+        this.outOfOrder = true;
+        this.full = false;
+        connection.write('ack');
+        break;
+      }
+      case 2: {
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameters length should be equal to two.');
+        }
+        const [id1, id2] = params;
+        this.deleteDataById(Number(id1));
+        this.deleteDataById(Number(id2));
+        this.outOfOrder = true;
+        this.full = false;
+        connection.write('ack');
+        break;
+      }
+      case 3: {
+        if (params.length !== 1) {
+          throw new Error('[Error] The parameter length should be equal to one.');
+        }
+        const [highId] = params;
+        const mapping = this.exchangeHighIndex(Number(highId), true);
+        connection.write('ack');
+        return mapping;
+      }
+      case 4: {
+        if (params.length !== 2) {
+          throw new Error('[Error] The parameters length should be equal to two.');
+        }
+        const [phrase, callback] = params;
+        this.addSystemNotice(phrase, callback);
+        connection.write('ack');
+        break;
+      }
+      default:
+        throw new Error('[Error] The code value should be in the range [0, 4]');
+    }
   }
 
   dealOptions() {
