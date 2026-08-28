@@ -24,7 +24,7 @@ describe('[Class] StorageCache;', () => {
   });
 
   test('The StorageCache should be able to be instill inverted type.', async () => {
-    const storageCache = new StorageCache(null);
+    const storageCache = new StorageCache({ connection: true, });
     storageCache.changeOptions('test-instill-operation/operation.txt', { blockSize: 6, });
     const blocks = storageCache.transformBlocks('test-instill-operation/opeartion.txt', 'test', 1);
     expect(JSON.stringify(blocks)).toMatch('[{\"index\":0,\"type\":1,\"range\":[1,4],\"data\":\"est\"}]');
@@ -45,9 +45,7 @@ describe('[Class] StorageCache;', () => {
     }, 8014, storages);
     distribStorage2.setTemporaryDiskSwitch(true);
     await DistribStorage.combine([distribStorage1, distribStorage2]);
-    const storageClient = new StorageClient({}, storages);
-    storageClient.setUpServer();
-    storageCache.setUpClient();
+    const storageClient = new StorageClient({ listen: true, }, storages);
     await storageCache.instillBlocks('test-instill-operation/operation.txt', blocks);
     const cache1 = storageCache.getBlocks('test-instill-operation/operation.txt', [0, 5]);
     expect(JSON.stringify(cache1)).toMatch('[\"s\",\"tring1\",\"test s\",\"tri\"]');

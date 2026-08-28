@@ -27,10 +27,19 @@ class StorageClient {
     const defaultOptions = {
       ip: '127.0.0.1',
       port: 7000,
+      listen: false,
     };
     this.options = Object.assign(defaultOptions, options);
     this.dealOptions();
     this.dealParams(allStorages);
+    const {
+      options: {
+        listen,
+      },
+    } = this;
+    if (listen === true) {
+      this.setUpServer();
+    }
     this.index = this.getRandomIndex();
     this.byteArray = new ByteArray({ size: 256n, shift: 0n, });
     this.shiftOneByteArray = new ByteArray({ size: 256n, shift: 1n, });

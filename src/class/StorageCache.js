@@ -204,6 +204,7 @@ class StorageCache {
       safeMemoryCapacity: 4 * 1024 * 1024 * 1024,
       ip: '127.0.0.1',
       port: 7000,
+      connection: false,
     };
     defaultOptions.bitWidth = getBitWidth();
     if (typeof options !== 'object' && options !== null) {
@@ -217,6 +218,14 @@ class StorageCache {
         logLevel,
       },
     } = this;
+    const {
+      options: {
+        connection,
+      },
+    } = this;
+    if (connection === true) {
+      this.setUpClient();
+    }
     this.data = new FileRouter({ logLevel, debug: false, hideError: true, });
     this.count = new FileRouter({ logLevel: 0, debug: false, hideError: true, });
     this.startTime = Date.now();
@@ -1687,23 +1696,25 @@ class StorageCache {
   }
 
   releaseOccupy(place, occupy) {
-    this.sortOrders(place);
-    const {
-      count,
-    } = this;
-    const quantity = count.gain(place);
-    if (quantity !== undefined) {
+    if (!this.checkMemory()) {
+      this.sortOrders(place);
       const {
-        orders,
-      } = quantity;
-      if (Array.isArray(orders)) {
-        for (let i = 0; i < orders.length; i += 1) {
-          const [_, idx] = orders[i];
-          const block = blocks[idx];
-          this.clearBlock(place, idx);
-          occupy -= this.getBlockOccupy(block);
-          if (occupy <= 0) {
-            break;
+        count,
+      } = this;
+      const quantity = count.gain(place);
+      if (quantity !== undefined) {
+        const {
+          orders,
+        } = quantity;
+        if (Array.isArray(orders)) {
+          for (let i = 0; i < orders.length; i += 1) {
+            const [_, idx] = orders[i];
+            const block = blocks[idx];
+            this.clearBlock(place, idx);
+            occupy -= this.getBlockOccupy(block);
+            if (occupy <= 0) {
+              break;
+            }
           }
         }
       }
